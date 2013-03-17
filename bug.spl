@@ -1,0 +1,3 @@
+Void g(u x) { }
+
+Void main() { g([]); }
