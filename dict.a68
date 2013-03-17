@@ -1,0 +1,100 @@
+PR include "util.a68" PR
+
+#
+    - symbol table
+    - uses FNV hash
+    - asserted symbols must be retracted in exact reverse order
+#
+
+INT fnv prime = 16777619;
+INT fnv basis = 2166136261;
+INT fnv buckets := 64;
+
+OP HASH = (STRING key)INT:
+BEGIN
+    BITS hash := BIN fnv basis;
+    FOR i TO UPB key DO
+	BITS byte = BIN ABS key[i];
+	hash := SHORTEN BIN (LENG fnv prime * ABS (hash XOR byte) MOD (LENG2**32))
+    OD;
+    ABS hash
+END;
+
+MODE DICTENTRY = STRUCT(STRING key, DECLINFO content);
+MODE DICT = [0:fnv buckets-1]STRUCT(INT usage, REF []DICTENTRY bins);
+
+COMMENT  
+  re-setting the size of DICT in this fashion is an insane hack,
+  but RR says a MODE declaration is simply an abbreviation...
+COMMENT
+
+PROC new dictionary = (INT buckets)DICT:
+    (fnv buckets := 64; DICT res; FOR i FROM LWB res TO UPB res DO res[i] := (0, HEAP[1]DICTENTRY) OD; res);
+
+PROC assert = (REF DICT d, STRING s, DECLINFO data)VOID:
+BEGIN
+    INT pos = HASH s MOD UPB d+1;
+    REF INT lim = usage OF d[pos];
+    REF REF []DICTENTRY list = bins OF d[pos];
+
+    IF lim = UPB list THEN
+	HEAP[lim*2]DICTENTRY new list;
+	new list[1:lim] := list;
+	list := new list
+    FI;
+
+    list[lim +:= 1] := (s, data)
+END;
+
+PROC retract = (REF DICT d, STRING s)VOID:
+BEGIN
+    INT pos = HASH s MOD UPB d+1;
+    REF INT lim = usage OF d[pos];
+    REF REF []DICTENTRY list = bins OF d[pos];
+
+    IF key OF list[lim] = s THEN
+	lim -:= 1
+    ELSE
+	put(stand error, ("fatal: out-of-order retraction of", s, "attempted"));
+	stop
+    FI
+END;
+
+PROC mark = (DICT d)[]INT:
+    usage OF d;
+PROC release = (REF DICT d, []INT prev)VOID:
+    usage OF d := prev;
+
+PROC retrieve = (DICT d, STRING s, REF DECLINFO result)BOOL:
+    (REF DECLINFO tmp = s INSIDE d; tmp IS NIL | FALSE | result := tmp; TRUE);
+
+PROC slice = (DICT d, []INT prev)DICT:
+    (DICT result; FOR i FROM LWB d TO UPB d DO 
+	result[i] := (usage OF d[i]-prev[i], (bins OF d[i])[prev[i]+1:])
+     OD; result);
+
+PROC for each entry = (DICT d, PROC(REF DICTENTRY)VOID p)VOID:
+    (FOR i FROM LWB d TO UPB d DO 
+	FOR j TO usage OF d[i] DO p ((bins OF d[i])[j]) OD OD);
+
+OP MEMBER = (STRING word, DICT map)BOOL:
+    word INSIDE map ISNT NIL;
+
+OP INSIDE = (STRING word, DICT map)REF DECLINFO:
+BEGIN
+    INT pos = HASH word MOD UPB map+1;
+    REF []DICTENTRY list = bins OF map[pos];
+    REF DECLINFO result := NIL;
+    FOR i FROM usage OF map[pos] BY -1 TO 1 WHILE REF DECLINFO(result) IS NIL DO
+	IF word = key OF list[i] THEN result := content OF list[i] FI
+    OD;
+    result
+END;
+
+PROC dump dictionary = (DICT d)VOID:
+FOR i FROM LWB d TO UPB d DO
+    FOR j TO usage OF d[i] DO 
+	print((key OF (bins OF d[i])[j],new line))
+    OD
+OD;
+
