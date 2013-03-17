@@ -35,7 +35,7 @@ COMMENT
 MODE SYMBOL  = STRUCT(STRING repr, [2]INT pos);
 MODE CONST   = STRUCT(INT int, [2]INT pos);
 
-MODE IDENT   = STRUCT(STRING name, [2]INT pos);
+MODE IDENT   = STRUCT(STRING name, [2]INT pos, REF DECLINFO info);
 MODE MONAD   = STRUCT(SYMBOL op, REF EXPR lhs);
 MODE DYAD    = STRUCT(SYMBOL op, REF EXPR lhs, rhs);
 
@@ -51,7 +51,7 @@ MODE RETURN  = STRUCT(UNION(EXPR,VOID) value, [2]INT pos);
 MODE STM     = UNION(REF STMLIST,IFSTM,WHILESTM,ASSIGN,DECLSTM,FUNCALL,RETURN);
 MODE STMLIST = STRUCT(STM stm, REF STMLIST tail);
 
-MODE DECLFUN = STRUCT(TYPE ret, IDENT id, REF[]PARAM args, REF STMLIST body);
+MODE DECLFUN = STRUCT(TYPE ret, IDENT id, REF[]PARAM args, REF STMLIST body, REF INT frame size);
 MODE PARAM   = STRUCT(TYPE type, IDENT id);
 
 MODE DECL    = UNION(DECLFUN,DECLSTM);
@@ -63,7 +63,10 @@ CO we don't actually use FUNT, although it is already here in case we want unify
 MODE LISTT   = STRUCT(REF TYPE lt, INT dummy);
 MODE PAIRT   = STRUCT(REF TYPE lt, rt);
 MODE FUNT    = STRUCT(REF[]TYPE args, REF TYPE ret);
-MODE TYPE    = UNION(SYMBOL,LISTT,PAIRT,IDENT,FUNT);
+MODE TYPE    = UNION(SYMBOL,LISTT,PAIRT,IDENT,FUNT,UNIFIER);
+
+MODE DECLINFO= STRUCT(DECL decl, INT pos);
+MODE UNIFIER = INT; # only used as a placeholder type #
 
 []STRING reserved words = 
     ("Void", "Int", "Bool", "True", "False","if","while","else","return");

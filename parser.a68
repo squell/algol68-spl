@@ -81,7 +81,7 @@ BEGIN
 	    EMPTY 
 	ELIF is alpha (tok[1]) THEN
 	    8DEBUG (VOID: write(("<IDWORD:", tok, ">", new line)));
-	    (is reserved (tok) | SYMBOL(tok,pos) | IDENT(tok, pos))
+	    (is reserved (tok) | SYMBOL(tok,pos) | IDENT(tok, pos, HEAP DECLINFO))
 	ELIF is digit (tok[1]) THEN
 	    8DEBUG (VOID: write(("<INT:", tok, ">", new line)));
 	    as integer(tok)
@@ -317,7 +317,7 @@ BEGIN
 		REQUIRE "(";
 		IF NOT MATCH ")" THEN gather formal args(1); REQUIRE ")" FI;
 		REQUIRE "{";
-		decl := DECLFUN(ret type, id, formal args, parse statements)
+		decl := DECLFUN(ret type, id, formal args, parse statements, HEAP INT)
 	    FI; TRUE
 	ELSE
 	    FALSE

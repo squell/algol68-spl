@@ -56,7 +56,7 @@ END;
     use multiple debugging levels so we can leave trace statements in our code
 #
 
-INT debug level := 10;
+INT debug level = 8;
 
 PRIO DEBUG = 9;
 OP DEBUG = (INT level, PROC VOID what)VOID: (level<debug level|what|~);
