@@ -1,7 +1,16 @@
 PR include "ast.a68" PR
 PR include "dict.a68" PR
+PR include "prelude.a68" PR
 
-#TODO: type balacngin #
+COMMENT
+  How restrictive should type instantiation be?
+
+  2 - disallow ambiguous calls
+  1 - disallow cyclic types
+  0 - infinite and generic types! probably inconsistent
+COMMENT
+
+INT type sanity = 1;
 
 PROC semantic analysis = (REF DECLS ast)VOID:
 BEGIN
@@ -10,23 +19,19 @@ BEGIN
     TYPE boolean  := SYMBOL("Bool", ~);
     TYPE placeholder := SYMBOL("*", ~);
 
-    PROC complain = (STRING why, []INT pos)REF STMLIST:
-    BEGIN
-        put (stand error, (pos,":",why,new line));
-        halt
-    END;
-
     # cleverly using the dictionary to reason about scope #
 
     DICT symbols := new dictionary (64);
     [LWB symbols:UPB symbols]INT cur scope;
     []INT global scope = cur scope := mark(symbols);
 
-    PROC make symbol = (IDENT id, DECL decl, INT info)VOID:
+    add prelude(symbols);
+
+    PROC make symbol = (IDENT id, UNION(DECL,PARAM) decl, INT info)VOID:
 	IF retrieve (slice(symbols,cur scope), name OF id, LOC DECLINFO) THEN
 	    complain ("`"+name OF id+"' already defined", pos OF id)
 	ELSE
-	    assert(symbols, name OF id, DECLINFO(decl,info))
+	    assert(symbols, name OF id, info OF id:=DECLINFO(decl,info))
 	FI;
 
     PROC get symbol = (IDENT id)DECLINFO:
@@ -36,12 +41,25 @@ BEGIN
 	    complain("unknown identifier: `"+name OF id+"'", pos OF id); ~
 	FI;
 
-    PROC get var type = (IDENT id)TYPE:
-	(decl OF get symbol(id) | (DECLSTM decl): type OF decl | 
-	   complain("`"+name OF id+"' is not assignable", pos OF id); ~ );
+    PROC proper type = (IDENT id, TYPE t)VOID:
+	IF (t|(SYMBOL s): s = "Void"|FALSE) THEN
+	    complain("attempt to declare a Void variable", pos OF id)
+	FI;
 
-    PROC get fun signature = (IDENT id)PARAMS:
-	(decl OF get symbol(id) | (DECLFUN fun): args OF fun | 
+    PROC get var type = (IDENT id)TYPE:
+    BEGIN
+	DECLINFO var = get symbol (id);
+	info OF id := var;
+	CASE decl OF var IN
+	    (DECLSTM decl): type OF decl,
+	    (PARAM arg):    type OF arg
+	OUT
+	    complain("function `"+name OF id+"' used where a variable expected", pos OF id); ~
+	ESAC
+    END;
+
+    PROC get fun signature = (IDENT id)DECLFUN:
+	(decl OF get symbol(id) | (DECLFUN fun): fun | 
 	   complain("`"+name OF id+"' is not a function", pos OF id); ~ );
 
     INT frame size;
@@ -67,12 +85,42 @@ BEGIN
 	    NIL
 	ELSE CASE s IN 
 	(DECLSTM d): 
-	    complain("declaration not allowed at this point", pos OF id OF d),
+	    (complain("declaration not allowed here", pos OF id OF d);~),
 	(REF STMLIST bloc):
 	    bloc
 	OUT 
 	    HEAP STMLIST:=(s, NIL)
 	ESAC FI;
+
+    # replace type variables with shared structures; do this just once #
+    INT ucount := 0;
+    PROC substitute type vars = (DECLFUN fun)VOID:
+    BEGIN
+	DICT types := new dictionary(1);
+	INT count := 0;
+	FOR i FROM 0 TO UPB args OF fun DO
+	    PROC edit type = (REF TYPE type)REF TYPE:
+	    CASE type IN
+		(LISTT t): HEAP TYPE:=LISTT(edit type (lt OF t),0),
+		(PAIRT t): HEAP TYPE:=PAIRT(edit type (lt OF t), edit type (rt OF t)),
+		(IDENT id): 
+		    IF DECLINFO found; retrieve (types, name OF id, found) THEN
+			(decl OF found| (PARAM v): type OF v | complain("fatal: cosmic rays!?",(0,0));~)
+		    ELSE
+			PARAM var := PARAM(HEAP TYPE:=ucount+:=1, id);
+			assert (types, name OF id, DECLINFO(var, count+:=1));
+			type OF var
+		    FI
+	    OUT type
+	    ESAC;
+	    REF REF TYPE cur = type OF (args OF fun)[i];
+	    cur := edit type(cur)
+	OD;
+	[count]PARAM type vars;
+	for each entry (types, (REF DICTENTRY entry)VOID: 
+	    type vars[pos OF content OF entry] := (decl OF content OF entry|(PARAM v):v|~));
+	unifiers OF fun := type vars
+    END;
 
     # two routines easing iteration #
 
@@ -87,6 +135,7 @@ BEGIN
 	CASE this IN
 	(DECLSTM decl):
 	    ( cur scope := global scope;
+	      proper type (id OF decl, type OF decl);
 	      value OF decl => type OF decl;
 	      make symbol (id OF decl, this, 0) ),
 	(DECLFUN function):
@@ -95,18 +144,25 @@ BEGIN
 	      frame size := frame offset := 0;
 
 	      []INT restore point = cur scope := mark (symbols);
+
+	      # record formal signature, then substitute #
+	      TYPE return type := ret type(function);
 	      FOR i TO UPB args OF function DO
-		  make symbol (id OF (args OF function)[i], this, i)
+		  PARAM parm = (args OF function)[i];
+		  proper type (id OF parm, type OF parm);
+		  make symbol (id OF parm, parm, i)
 	      OD;
+
+	      substitute type vars (function);
 	      for each stm(body OF function, process stm);
 
 	      PROC process stm = (REF STM stm)VOID:
 		  CASE stm IN
 		  (RETURN v):
-		      (value OF v|(EXPR e): e => ret type(function),
-		                  (VOID)  : type identical(void, ret type(function), pos OF v)),
+		      (value OF v|(EXPR e): e => return type,
+		                  (VOID)  : type identify(void, return type, pos OF v)),
 		  (FUNCALL e):
-		      check function call (e),
+		      check function call (e, CASE 2 IN void, HEAP TYPE:=0 ESAC),
 		  (ASSIGN a):
 		      value OF a => get var type (id OF a),
 		  (REF STMLIST bloc):
@@ -125,7 +181,8 @@ BEGIN
 			body OF wh := body;
 			new scope(VOID: for each stm(body, process stm)) ),
 		  (DECLSTM decl):
-		      ( value OF decl => type OF decl,
+		      ( proper type (id OF decl, type OF decl);
+		        value OF decl => type OF decl;
 			make symbol (id OF decl, decl, new offset) )
 		  OUT
 		      complain("fatal: compiler is incomplete!", (0,0))
@@ -137,101 +194,140 @@ BEGIN
 	ESAC
     );
 
-    PROC check function call = (FUNCALL call)TYPE:
+    PROC check function call = (FUNCALL call, REF TYPE target)VOID:
     BEGIN
-	PARAMS sign = get fun signature (id OF call);
+	DECLFUN decl = get fun signature (id OF call);
+	PARAMS sign = args OF decl;
 	IF UPB args OF call /= UPB sign THEN
 	    complain ("wrong number of arguments in call", pos OF id OF call)
 	ELSE
 	    FOR i TO UPB args OF call DO
-		(args OF call)[i] => type OF sign[i]
+		(args OF call)[i] %> type OF sign[i]
 	    OD
 	FI;
-	type OF sign[0]
+	type identify(type OF sign[0], target, pos OF id OF call);
+
+	# check if well-typed function call & reset unifiers #
+	FOR i TO UPB unifiers OF decl DO 
+	    PARAM unifier = (unifiers OF decl)[i];
+
+	    PROC cycle check = ([]REF TYPE types, PROC VOID unifier found)VOID:
+	    BEGIN 
+		[UPB types+1]REF TYPE seen; seen[2:] := types;
+		FOR i FROM 2 TO UPB types DO IF types[i] IS types[1] THEN
+		    complain ("cyclic type detected for type variable "+name OF id OF unifier,  pos OF id OF call)
+		FI OD;
+		CASE types[1] IN
+		    (LISTT t): cycle check((seen[1]:=lt OF t; seen), unifier found),
+		    (PAIRT t): (cycle check((seen[1]:=lt OF t; seen), unifier found);
+				cycle check((seen[1]:=rt OF t; seen), unifier found)),
+		    (UNIFIER u): unifier found
+		ESAC
+	    END;
+
+	    CASE type sanity IN
+		cycle check(type OF unifier, VOID: SKIP),
+		cycle check(type OF unifier, VOID: complain("could not deduce concrete type for type variable "+name OF id OF unifier, pos OF id OF call))
+	    ESAC;
+	    type OF unifier := i
+	OD
     END;
 
     PRIO => = 5;
-    OP => = (EXPR expr, TYPE type)VOID: 
+    OP => = (EXPR expr, TYPE type)VOID: expr %> (LOC TYPE:=type);
+
+    PRIO %> = 5;
+    OP %> = (EXPR expr, REF TYPE type)VOID: 
     CASE expr IN
 	(SYMBOL s): 
 	    IF s = "True" OR s = "False" THEN 
-		type identical (boolean, type, pos OF s)
+		type identify (boolean, type, pos OF s)
 	    ELIF s = "[]" THEN 
-		(type| (LISTT t):~ | unification error(LISTT(placeholder,0), type, pos OF s))
+		# a crucial case! #
+		TYPE any list := LISTT(HEAP TYPE:=42,0);
+		type identify (any list, type, pos OF s)
 	    ELSE
-		complain ("fatal: illegal symbol?!", ~)
+		complain ("fatal: illegal symbol?!", (0,0))
 	    FI,
 	(CONST i):
-	    type identical (integral, type, pos OF i),
+	    type identify (integral, type, pos OF i),
+
+	CO 
+	   what follows is actually a hardcoded library of operators .... 
+	   we could make this cleaner and allow for operator
+	   overloading at the same time!
+	CO
 	(MONAD m):
 	    IF op OF m = "-" THEN 
-		type identical (integral, type, pos OF op OF m);
-		lhs OF m => integral
+		type identify (integral, type, pos OF op OF m);
+		lhs OF m %> integral
 	    ELIF op OF m = "!" THEN 
-		type identical (boolean, type, pos OF op OF m);
-		lhs OF m => boolean
-	    ELSE complain("fatal: illegal operator?!", ~)
+		type identify (boolean, type, pos OF op OF m);
+		lhs OF m %> boolean
+	    ELSE complain("fatal: illegal operator?!", (0,0))
 	    FI,
 	(DYAD d):
 	    IF char in string ((repr OF op OF d)[1], NIL, "&|") THEN
-		type identical (boolean, type, pos OF op OF d);
-		lhs OF d => boolean;
-		rhs OF d => boolean
+		type identify (boolean, type, pos OF op OF d);
+		lhs OF d %> boolean;
+		rhs OF d %> boolean
 	    ELIF char in string ((repr OF op OF d)[1], NIL, "=<>") THEN
-		type identical (boolean, type, pos OF op OF d);
-		# TODO?: overloaded comparison? #
-		lhs OF d => integral;
-		rhs OF d => integral
+		type identify (boolean, type, pos OF op OF d);
+		lhs OF d %> integral;
+		rhs OF d %> integral
 	    ELIF op OF d = ":" THEN
-	    # todo #
-		CASE type IN (LISTT lstt):
-		    (lhs OF d => lt OF lstt; rhs OF d => lstt)
-		OUT unification error (LISTT(placeholder,0), type, pos OF op OF d)
-		ESAC
+		HEAP TYPE elem := 23;
+		HEAP TYPE any list := LISTT(elem, 0);
+		lhs OF d %> elem;
+		rhs OF d %> any list;
+		type identify (any list, type, pos OF op OF d)
 	    ELSE 
-		type identical (integral, type, pos OF op OF d);
-		rhs OF d => integral;
-		lhs OF d => integral
+		type identify (integral, type, pos OF op OF d);
+		rhs OF d %> integral;
+		lhs OF d %> integral
 	    FI,
 	(TUPLE t):
 	    CASE type IN (PAIRT p):
-		(lhs OF t => lt OF p; rhs OF t => rt OF p)
+		(lhs OF t %> lt OF p; rhs OF t %> rt OF p)
 	    OUT unification error (PAIRT(placeholder,placeholder), type, pos OF t)
 	    ESAC,
 	(IDENT id):
-	    BEGIN
-		DECLINFO var = get symbol (id);
-		info OF id := var;
-		CASE decl OF var IN
-		    (DECLSTM decl):
-			type identical (type OF decl, type, pos OF id),
-		    (DECLFUN fun): 
-		        IF pos OF var = 0 THEN
-		            complain("function `"+name OF id+"' used in a "+REPR type+" context", pos OF id) 
-			ELSE
-			    type identical (type OF (args OF fun)[pos OF var], type, pos OF id)
-		        FI
-		ESAC
-	    END,
+	    type identify (HEAP TYPE:=get var type (id), type, pos OF id),
 	(FUNCALL f):
-	    type identical (check function call(f), type, pos OF id OF f)
+	    check function call(f, type)
     ESAC;
 
-    PROC type identical = (TYPE src, tgt, []INT pos)VOID:
+    PROC type identify = (REF TYPE src, tgt, []INT pos)VOID:
 	(src = tgt | ~ | unification error(src, tgt, pos));
 
     PROC unification error = (TYPE src, tgt, []INT pos)VOID:
 	complain ("cannot unify types: `"+REPR src+"' found but `"+REPR tgt+"' expected", pos);
 
-    OP = = (TYPE a, b)BOOL:
-    CASE a IN
+    OP = = (REF TYPE a, b)BOOL:
+    IF a IS b THEN TRUE ELSE
+    CASE b IN
+        (UNIFIER i): (6DEBUG (VOID: print((REPR b,":=",REPR a,new line)));
+	    (a|(UNIFIER j):FALSE| b := a; TRUE))
+	COMMENT
+	    we can't unify unifiers; for type resolution to proceed succesfully, these
+	    should be linked -- this would require another layer of indirection in the
+	    type system which is not worth it.
+	COMMENT
+    OUSE a IN
 	(SYMBOL sa): (b|(SYMBOL sb):repr OF sa=repr OF sb|FALSE),
 	(LISTT  la): (b|(LISTT lb):lt OF la = lt OF lb|FALSE),
 	(PAIRT  pa): (b|(PAIRT pb):lt OF pa = lt OF pb AND
 				   rt OF pa = rt OF pb|FALSE),
-	(IDENT  ia): (b|(IDENT ib):name OF ia = name OF ib|FALSE)
-	OUT FALSE
-    ESAC;
+	(IDENT  ia): (b|(IDENT ib):name OF ia = name OF ib|FALSE),
+	(UNIFIER i): (6DEBUG (VOID: print((REPR b,"=:",REPR a,new line)));
+	    (b|(SYMBOL s):NOT(s = "Void")|TRUE) ANDTH (a := b; TRUE))
+	COMMENT
+	    sanity = 2: this case should only validly apply in case of []; 
+	    any other use of a generic return type is forbidden elsewhere
+	    sanity < 2: disallow instantiating void
+	COMMENT 
+    OUT complain("fatal: types types types!?", (0,0)); FALSE
+    ESAC FI;
 
 ~
 END;
@@ -239,7 +335,7 @@ END;
 PR include "parser.a68" PR
 PR include "astprint.a68" PR
 
-(DECLS prog := parse file("test.spl");
+(DECLS prog := parse file("test2.spl");
  semantic analysis(prog);
  ~
  )

@@ -17,11 +17,8 @@ BEGIN
     INT col := 0;
     [2]INT pos;
 
-    PROC complain = (STRING why)BOOL:
-    BEGIN
-	put (stand error, (pos,":",why,new line));
-	halt
-    END;
+    PROC parse error = (STRING why)BOOL:
+	(complain(why,pos); SKIP);
 
     CHAR cur char := " ";
 
@@ -48,7 +45,7 @@ BEGIN
 	INT val := 0;
 	FOR i TO UPB word DO
 	    IF NOT is digit (word[i]) THEN
-		complain ("not a valid integer constant")
+		parse error ("not a valid integer constant")
 	    FI;
 	    val := 10*val + (ABS word[i] - ABS "0")
 	OD;
@@ -222,6 +219,8 @@ BEGIN
 	recurse(1); TRUE
     END;
 
+    # treat Void as a type for parsing purposes; this allows us to
+      give better error messages later on #
     OP MATCH = (REF TYPE spec)BOOL:
     BEGIN
 	[]STRING prim types = ("Int", "Bool", "Void");
@@ -307,7 +306,7 @@ BEGIN
 		PARAMS formal args;
 		PROC gather formal args = (INT i)VOID:
 		BEGIN
-		    TYPE type; REQUIRE type;
+		    HEAP TYPE type; REQUIRE type;
 		    IDENT id;  REQUIRE id;
 		    IF MATCH "," THEN gather formal args(i+1) ELSE formal args := HEAP [0:i] PARAM FI;
 		    formal args[i] := (type, id)
@@ -320,8 +319,8 @@ BEGIN
 		    formal args := HEAP[0:0] PARAM
 		FI;
 		REQUIRE "{";
-		formal args[0] := (ret type, id);
-		decl := DECLFUN(formal args, parse statements, HEAP INT)
+		formal args[0] := (HEAP TYPE:=ret type, id);
+		decl := DECLFUN(formal args, parse statements, HEAP INT, HEAP FLEX[0]PARAM)
 	    FI; TRUE
 	ELSE
 	    FALSE
@@ -344,11 +343,11 @@ BEGIN
     IF MATCH program THEN
 	7DEBUG (VOID: DUMP( program) )
     ELSE
-	complain ("cowardly refusing to compile an empty program")
+	parse error ("cowardly refusing to compile an empty program")
     FI;
 
     IF (token|(VOID):FALSE|TRUE) THEN
-	complain ("stray junk at end of program: "+
+	parse error ("stray junk at end of program: "+
 	    (token|(IDENT id): name OF id,
 	           (SYMBOL s): repr OF s,
 		   (INT i): whole(i,0)))
@@ -357,19 +356,19 @@ BEGIN
     # syntax error messages #
 
     OP REQUIRE = ([] CHAR sym)VOID:
-	(MATCH sym | TRUE | complain ("expecting `"+sym+"'"));
+	(MATCH sym | TRUE | parse error ("expecting `"+sym+"'"));
     OP REQUIRE = (CHAR sym)VOID:
-	(MATCH sym | TRUE | complain ("expecting `"+sym+"'"));
+	(MATCH sym | TRUE | parse error ("expecting `"+sym+"'"));
     OP REQUIRE = (REF TYPE type)VOID:
-	(MATCH type | TRUE | complain ("invalid type specifier"));
+	(MATCH type | TRUE | parse error ("invalid type specifier"));
     OP REQUIRE = (REF STM stm)VOID:
-	(MATCH stm | TRUE | complain ("statement expected"));
+	(MATCH stm | TRUE | parse error ("statement expected"));
     OP REQUIRE = (REF EXPR expr)VOID:
-	(MATCH expr | TRUE | complain ("illegal expression"));
+	(MATCH expr | TRUE | parse error ("illegal expression"));
     OP REQUIRE = (REF IDENT id)VOID:
-	(MATCH id | TRUE | complain ("identifier expected"));
+	(MATCH id | TRUE | parse error ("identifier expected"));
     PROC missing expression = BOOL:
-	(complain ("illegal operator"); halt);
+	(parse error ("illegal operator"); halt);
 
     program
 END;

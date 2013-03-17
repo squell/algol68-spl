@@ -1,4 +1,3 @@
-
 #
     overloaded "container" functions - rows
 #
@@ -56,8 +55,14 @@ END;
     use multiple debugging levels so we can leave trace statements in our code
 #
 
-INT debug level = 8;
+INT debug level = 7;
 
 PRIO DEBUG = 9;
 OP DEBUG = (INT level, PROC VOID what)VOID: (level<debug level|what|~);
+
+PROC complain = (STRING why, []INT pos)VOID:
+BEGIN
+    putf (stand error, ($2(4z,": "),n(UPB why)a$,pos,why));
+    halt
+END;
 

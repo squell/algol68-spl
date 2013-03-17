@@ -2,7 +2,12 @@ PR include "ast.a68" PR
 PR include "util.a68" PR
 
 OP REPR = (TYPE t)STRING:
-    CASE t IN
+BEGIN
+INT repr level := 10;
+
+OP REPR = (TYPE t)STRING:
+IF (repr level -:= 1) > 0 THEN
+    STRING result = CASE t IN
       (SYMBOL s): repr OF s,
       (UNIFIER i):"v" + whole(i,0),
       (IDENT i) : name OF i,
@@ -16,6 +21,14 @@ OP REPR = (TYPE t)STRING:
 	      "(" + s + ")->" + REPR ret OF t
 	  END
     ESAC;
+    repr level +:= 1;
+    result
+ELSE
+    "..."
+FI;
+
+REPR t
+END;
 
 PROC pretty print = (DECLS program)VOID:
 BEGIN
