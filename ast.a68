@@ -65,10 +65,11 @@ CO we don't actually use FUNT, although it is already here in case we want unify
 MODE LISTT   = STRUCT(REF TYPE lt, INT dummy);
 MODE PAIRT   = STRUCT(REF TYPE lt, rt);
 MODE FUNT    = STRUCT(REF[]TYPE args, REF TYPE ret);
-MODE TYPE    = UNION(SYMBOL,LISTT,PAIRT,IDENT,FUNT,UNIFIER);
+MODE TYPE    = UNION(SYMBOL,LISTT,PAIRT,IDENT,FUNT,UNIFIER,TYPELNK);
 
 MODE DECLINFO= STRUCT(UNION(DECL,PARAM) decl, INT pos);
 MODE UNIFIER = INT; # only used as a placeholder type #
+MODE TYPELNK = STRUCT(REF TYPE alias,BOOL dummy);
 
 []STRING reserved words = 
     ("Void", "Int", "Bool", "True", "False","if","while","else","return");
@@ -79,23 +80,3 @@ PROC ret type = (DECLFUN decl)TYPE: type OF (args OF decl)[0];
 OP = = (SYMBOL t, STRING s)BOOL: s = repr OF t;
 OP = = (SYMBOL t, CHAR s)BOOL: s = repr OF t;
 
-#
-PROC cycle check = ([]REF TYPE types)VOID:
-BEGIN
-    [UPB types+1]REF TYPE seen; 
-    seen[2:] := types;
-    REF TYPE barf;
-    CASE types[1] IN
-	(LISTT t):
-	BEGIN
-	    barf := lt OF t;
-	    cycle check(types)
-	END
-    ESAC
-END;
-
-(
-  TYPE bla := LISTT(LOC TYPE:=bla,0);
-  cycle check (bla)
-)
-#

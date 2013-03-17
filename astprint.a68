@@ -10,6 +10,7 @@ IF (repr level -:= 1) > 0 THEN
     STRING result = CASE t IN
       (SYMBOL s): repr OF s,
       (UNIFIER i):"v" + whole(i,0),
+      (TYPELNK k):REPR alias OF k,
       (IDENT i) : name OF i,
       (LISTT t) : "[" + REPR lt OF t + "]",
       (PAIRT t) : "(" + REPR lt OF t + "," + REPR rt OF t + ")",

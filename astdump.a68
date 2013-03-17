@@ -62,6 +62,7 @@ OP DUMP = (REF DECL x)VOID:
 OP DUMP = (REF TYPE t)VOID:
     CASE t IN
       (UNIFIER i): (print("*"); DUMP i),
+      (TYPELNK l): DUMP alias OF l,
       (SYMBOL s): DUMP s,
       (IDENT i) : (print("'"); DUMP i),
       (LISTT t) : (print("[]"); DUMP (LOC TYPE:=lt OF t)),

@@ -3,14 +3,23 @@ PR include "dict.a68" PR
 PR include "prelude.a68" PR
 
 COMMENT
-  How restrictive should type instantiation be?
+  type sanity - how strict should type instantiation be?
 
-  2 - disallow ambiguous calls
+  3 - don't use return type for derivation
+  2 - disallow all ambiguous calls
   1 - disallow cyclic types
-  0 - infinite and generic types! probably inconsistent
+  0 - infinite and generic types
+
+  type chaining - use a more powerful type unification
+  	* you should NOT need this with sanity = 3
+
+  type voiding - discard function call results?
+   	* if FALSE, only Void functions can be statements
 COMMENT
 
-INT type sanity = 1;
+INT  type sanity = 2;
+BOOL type voiding = FALSE;
+BOOL type chaining = TRUE;
 
 PROC semantic analysis = (REF DECLS ast)VOID:
 BEGIN
@@ -162,7 +171,7 @@ BEGIN
 		      (value OF v|(EXPR e): e => return type,
 		                  (VOID)  : type identify(void, return type, pos OF v)),
 		  (FUNCALL e):
-		      check function call (e, CASE 2 IN void, HEAP TYPE:=0 ESAC),
+		      check function call (e, (type voiding|LOC TYPE:=0|void)),
 		  (ASSIGN a):
 		      value OF a => get var type (id OF a),
 		  (REF STMLIST bloc):
@@ -198,6 +207,7 @@ BEGIN
     BEGIN
 	DECLFUN decl = get fun signature (id OF call);
 	PARAMS sign = args OF decl;
+
 	IF UPB args OF call /= UPB sign THEN
 	    complain ("wrong number of arguments in call", pos OF id OF call)
 	ELSE
@@ -205,36 +215,73 @@ BEGIN
 		(args OF call)[i] %> type OF sign[i]
 	    OD
 	FI;
-	type identify(type OF sign[0], target, pos OF id OF call);
 
-	# check if well-typed function call & reset unifiers #
-	FOR i TO UPB unifiers OF decl DO 
+	PROC all types instantiated = VOID:
+	    FOR i TO UPB unifiers OF decl DO
+		PARAM unifier = (unifiers OF decl)[i];
+		(type OF unifier | (UNIFIER i):
+		    complain("could not deduce concrete type for type variable "+name OF id OF unifier, pos OF id OF call))
+	    OD;
+
+	PROC detect cyclic types = VOID:
+	    FOR i TO UPB unifiers OF decl DO 
+		PARAM unifier = (unifiers OF decl)[i];
+
+		PROC cycle check = ([]REF TYPE types)VOID:
+		BEGIN 
+		    [UPB types+1]REF TYPE seen; seen[2:] := types;
+		    FOR i FROM 2 TO UPB types DO IF types[i] IS types[1] THEN
+			TYPE inf = types[1]; types[1] := id OF unifier;
+			complain ("attempt to instantiate cyclic type "+name OF id OF unifier+" = "+REPR inf,  pos OF id OF call)
+		    FI OD;
+		    CASE types[1] IN
+			(LISTT t): cycle check((seen[1]:=lt OF t; seen)),
+			(PAIRT t): (cycle check((seen[1]:=lt OF t; seen));
+				    cycle check((seen[1]:=rt OF t; seen)))
+		    ESAC
+		END;
+		cycle check (type OF unifier)
+	    OD;
+
+	CASE type sanity IN
+	    (type identify(type OF sign[0], target, pos OF id OF call);
+	     detect cyclic types),
+
+	    (type identify(type OF sign[0], target, pos OF id OF call);
+	     all types instantiated;
+	     detect cyclic types),
+
+	    (all types instantiated;
+	     detect cyclic types;
+	     type identify(type OF sign[0], target, pos OF id OF call))
+	OUT
+	     type identify(type OF sign[0], target, pos OF id OF call)
+	ESAC;
+
+	IF NOT type chaining THEN FOR i TO UPB unifiers OF decl DO
 	    PARAM unifier = (unifiers OF decl)[i];
-
-	    PROC cycle check = ([]REF TYPE types, PROC VOID unifier found)VOID:
-	    BEGIN 
-		[UPB types+1]REF TYPE seen; seen[2:] := types;
-		FOR i FROM 2 TO UPB types DO IF types[i] IS types[1] THEN
-		    complain ("cyclic type detected for type variable "+name OF id OF unifier,  pos OF id OF call)
-		FI OD;
-		CASE types[1] IN
-		    (LISTT t): cycle check((seen[1]:=lt OF t; seen), unifier found),
-		    (PAIRT t): (cycle check((seen[1]:=lt OF t; seen), unifier found);
-				cycle check((seen[1]:=rt OF t; seen), unifier found)),
-		    (UNIFIER u): unifier found
-		ESAC
-	    END;
-
-	    CASE type sanity IN
-		cycle check(type OF unifier, VOID: SKIP),
-		cycle check(type OF unifier, VOID: complain("could not deduce concrete type for type variable "+name OF id OF unifier, pos OF id OF call))
-	    ESAC;
-	    type OF unifier := i
-	OD
+	    type OF unifier := i 
+	OD FI
     END;
 
+    PROC reset unifiers = (EXPR e)VOID:
+    CASE e IN
+	(MONAD m):   (reset unifiers (lhs OF m)),
+	(DYAD d):    (reset unifiers (lhs OF d); reset unifiers (rhs OF d)),
+	(TUPLE d):   (reset unifiers (lhs OF d); reset unifiers (rhs OF d)),
+	(FUNCALL f): (FOR i TO UPB args OF f DO reset unifiers ((args OF f)[i]) OD;
+	              DECLFUN decl = get fun signature (id OF f);
+	              FOR i TO UPB unifiers OF decl DO REF TYPE(type OF (unifiers OF decl)[i]) := i OD)
+    ESAC;
+
     PRIO => = 5;
-    OP => = (EXPR expr, TYPE type)VOID: expr %> (LOC TYPE:=type);
+    OP => = (EXPR expr, TYPE type)VOID: 
+	IF NOT type chaining THEN
+	    expr %> (LOC TYPE:=type)
+	ELSE
+	    expr %> (LOC TYPE:=type);
+	    reset unifiers (expr)
+	FI;
 
     PRIO %> = 5;
     OP %> = (EXPR expr, REF TYPE type)VOID: 
@@ -307,11 +354,16 @@ BEGIN
     IF a IS b THEN TRUE ELSE
     CASE b IN
         (UNIFIER i): (6DEBUG (VOID: print((REPR b,":=",REPR a,new line)));
-	    (a|(UNIFIER j):FALSE| b := a; TRUE))
+	    CASE a IN (UNIFIER j):
+		IF type chaining THEN
+		    a := TYPELNK(b,~); TRUE
+		ELSE FALSE FI
+	    OUT b := a; TRUE
+	    ESAC)
 	COMMENT
-	    we can't unify unifiers; for type resolution to proceed succesfully, these
-	    should be linked -- this would require another layer of indirection in the
-	    type system which is not worth it.
+	    we shouldn't unify unifiers; normal circumstances the linking
+	    behaviour is not necessary since arguments should be fully
+	    instantiated.
 	COMMENT
     OUSE a IN
 	(SYMBOL sa): (b|(SYMBOL sb):repr OF sa=repr OF sb|FALSE),
@@ -319,8 +371,9 @@ BEGIN
 	(PAIRT  pa): (b|(PAIRT pb):lt OF pa = lt OF pb AND
 				   rt OF pa = rt OF pb|FALSE),
 	(IDENT  ia): (b|(IDENT ib):name OF ia = name OF ib|FALSE),
+	(TYPELNK k): alias OF k = b,
 	(UNIFIER i): (6DEBUG (VOID: print((REPR b,"=:",REPR a,new line)));
-	    (b|(SYMBOL s):NOT(s = "Void")|TRUE) ANDTH (a := b; TRUE))
+	    IF (b|(SYMBOL s):s="Void"|FALSE) THEN FALSE ELSE a := b; TRUE FI)
 	COMMENT
 	    sanity = 2: this case should only validly apply in case of []; 
 	    any other use of a generic return type is forbidden elsewhere
