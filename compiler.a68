@@ -1,6 +1,6 @@
 PR include "parser.a68" PR
 
 BEGIN
-    DECLS ast = parse file("fac.spl");
+    DECLS ast = parse file("stress.spl");
     pretty print (ast)
 END

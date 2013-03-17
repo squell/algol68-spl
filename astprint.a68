@@ -124,6 +124,7 @@ OP P = (REF STMLIST x)VOID:
     (print(("{", next indent));
      REF STMLIST cur := x;
      WHILE REF STMLIST(cur) ISNT NIL DO
+	(stm OF cur | (REF STMLIST x): print(indent) | ~); # vacuous blocks #
 	P stm OF cur;
 	cur := tail OF cur 
      OD;
