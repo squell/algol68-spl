@@ -109,7 +109,7 @@ OP P = (WHILESTM x)VOID:
      P (LOC EXPR:=cond OF x); 
      print((")",k and r(body OF x,space,next indent)));
      P body OF x;
-     print(prev indent));
+     print(k and r(body OF x,(REF FILE f)VOID:SKIP,prev indent)));
 OP P = (ASSIGN x)VOID:
     (print(indent);
      P id OF x; print((" = ")); 
