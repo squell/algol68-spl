@@ -10,7 +10,8 @@ fnord/**/main()  // should not paste tokens together!
 	[([foo],bar)] y = this_is_fine((1,(2,3))); 
       } 
     else Void//
-x = not_allowed((1),2); /* caught in next phase */
+x = not_allowed((1),2); 
+/* this declarion will be made illegal in the next compilation phase */
 }}
 
 /* output:
