@@ -1,0 +1,379 @@
+PR include "ast.a68" PR
+PR include "util.a68" PR
+PR include "astdump.a68" PR
+PR include "astprint.a68" PR
+
+PROC parse input = (REF FILE source)DECLS:
+CO
+    this routine transforms the input string into lexical elements (read token)
+    and subsequently parses this stream of tokens into a abstract syntax tree
+CO
+BEGIN
+    HEAP[0]EXPR no args;
+    HEAP[0]PARAM no formal args;
+
+    MODE TOKEN = UNION(INT, SYMBOL, IDENT, VOID);
+
+    INT line := 1;
+    INT col := 0;
+    [2]INT pos;
+
+    PROC complain = (STRING why)BOOL:
+    BEGIN
+	put (stand error, (pos,":",why,new line));
+	halt
+    END;
+
+    CHAR cur char := " ";
+
+    PROC next char = CHAR:
+    BEGIN
+	get(source, cur char); 
+	9DEBUG (VOID: print(("'", cur char)));
+	col +:= 1; cur char
+    END;
+
+    PROC skip white space = VOID:
+    BEGIN
+	on line end(source, (REF FILE f)BOOL: (get(f, new line); line +:= 1; col := 0; cur char := " "; TRUE));
+	WHILE is space (cur char) DO next char OD
+    END;
+
+    PROC is reserved = (STRING word)BOOL:
+    BEGIN
+	word MEMBER reserved words
+    END;
+
+    PROC as integer = (STRING word)INT:
+    BEGIN
+	INT val := 0;
+	FOR i TO UPB word DO
+	    IF NOT is digit (word[i]) THEN
+		complain ("not a valid integer constant")
+	    FI;
+	    val := 10*val + (ABS word[i] - ABS "0")
+	OD;
+	val
+    END;
+
+    PROC read token = TOKEN:
+    CO
+	this is the lexicalization step, processing raw input characters
+	into usable tokens for the parsing fase (which happens concurrently)
+    CO
+    BEGIN
+	STRING tok := "";
+	on file end(source, (REF FILE f)BOOL: (cur char:=" ";leave)); 
+    read token:
+
+	skip white space;
+	on line end(source, (REF FILE f)BOOL: (cur char:=" ";leave));
+	pos := (line, col);
+	tok := cur char;
+
+	IF is alnum(cur char) THEN 
+	    WHILE CHAR ch = next char; is alnum(ch) OR ch = "_" DO tok +:= ch OD
+	ELSE next char FI;
+
+    leave: 
+	IF tok = "" THEN 
+	    8DEBUG (VOID: write(("<~>", new line)));
+	    EMPTY 
+	ELIF is alpha (tok[1]) THEN
+	    8DEBUG (VOID: write(("<IDWORD:", tok, ">", new line)));
+	    (is reserved (tok) | SYMBOL(tok,pos) | IDENT(tok, pos))
+	ELIF is digit (tok[1]) THEN
+	    8DEBUG (VOID: write(("<INT:", tok, ">", new line)));
+	    as integer(tok)
+	ELSE
+	    IF tok[1] = "/" THEN
+		IF cur char = "/" THEN
+		    # comment to end of line #
+		    on line end(source, (REF FILE f)BOOL: (cur char := " "; read token)); 
+		    DO next char OD
+		ELIF cur char = "*" THEN
+		    # C-style comment #
+		    skip white space;
+		    WHILE (WHILE next char /= "*" DO ~ OD; next char) /= "/" DO ~ OD;
+		    next char;
+		    read token
+		FI
+	    ELIF char in string (tok[1], NIL, "<>!=") AND cur char = "=" THEN
+		tok +:= cur char;
+		next char
+	    ELIF char in string (tok[1], NIL, "&|") AND tok[1] = cur char THEN
+		tok +:= cur char;
+		next char
+	    FI;
+	    8DEBUG (VOID: write(("<SYMBOL:", tok, ">", new line)));
+	    SYMBOL(tok, pos)
+	FI
+    END;
+
+    SYMBOL matched symbol;
+    TOKEN token;
+    PROC shift = BOOL: (token := read token; TRUE);
+    shift;
+
+    OP MATCH = (CHAR symbol)BOOL:
+	( token | (SYMBOL k): (matched symbol:=k)=symbol ANDTH shift | FALSE );
+    OP MATCH = ([]CHAR symbol)BOOL:
+	( token | (SYMBOL k): (matched symbol:=k)=symbol ANDTH shift | FALSE );
+    OP MATCH = ([]STRING symbol)BOOL:
+	( token | (SYMBOL k): repr OF (matched symbol:=k) MEMBER symbol ANDTH shift | FALSE );
+    OP MATCH = (REF INT obj)BOOL: 
+	( token | (INT i): (obj := i; shift) | FALSE );
+    OP MATCH = (REF IDENT obj)BOOL: 
+	( token | (IDENT id): (obj := id; shift) | FALSE );
+
+    PROC parse arguments = REF[]EXPR:
+    BEGIN
+	REF[]EXPR arg list := no args;
+	IF NOT MATCH ")" THEN
+	    VOID (MATCH arg list);
+	    REQUIRE ")"
+	FI;
+	arg list
+    END;
+
+    OP MATCH = (REF EXPR obj)BOOL:
+    BEGIN
+	[]STRING units = ("True", "False");
+	[]STRING monop = ("!","-");
+
+	[][]STRING dyop = 
+	    (("*", "/", "%"), ("+","-"),
+	     (">","<","<=",">="), ("==", "!="),
+	     ("&&"), ("||"), (":"));
+
+	PROC match primary = (REF EXPR obj)BOOL:
+	BEGIN
+	    SYMBOL sym;
+	    INT val;
+	    IDENT id;
+
+	    IF MATCH val THEN
+		obj := CONST(val, pos#!#); TRUE
+	    ELIF MATCH "(" THEN
+		REQUIRE obj;
+		IF MATCH "," THEN
+		    HEAP EXPR lhs := obj, rhs;
+		    REQUIRE rhs;
+		    obj := TUPLE(lhs, rhs, pos#!#)
+		FI;
+		REQUIRE ")"; TRUE
+	    ELIF MATCH "[" THEN
+		obj := SYMBOL("[]", pos OF matched symbol); 
+		REQUIRE "]"; TRUE
+	    ELIF MATCH units THEN 
+		obj := matched symbol; TRUE
+	    ELIF MATCH monop THEN
+		REQUIRE obj;
+		obj := MONAD(matched symbol, HEAP EXPR:=obj); TRUE
+	    ELIF MATCH id THEN
+		IF MATCH "(" THEN
+		    obj := FUNCALL(id, parse arguments); TRUE
+		ELSE
+		    obj := id; TRUE
+		FI
+	    ELSE
+		FALSE
+	    FI
+	END;
+
+	PROC default = (REF EXPR e)EXPR: e;
+
+	PROC match priority = (REF EXPR obj, INT level, PROC(REF EXPR)EXPR left extend)BOOL:
+	BEGIN
+	    IF level = 0 THEN
+		match primary (obj)
+	    ELIF match priority (obj, level-1, default) THEN
+		EXPR lhs = left extend(obj); 
+		EXPR rhs;
+		IF MATCH dyop[level] THEN
+		    SYMBOL op = matched symbol;
+		    IF op = ":" THEN 
+			# right-associative #
+			match priority (rhs, level, default) OREL missing expression;
+			obj := DYAD(op, HEAP EXPR:=lhs, HEAP EXPR:=rhs)
+		    ELSE 
+			# left-associative #
+			match priority (obj, level, (REF EXPR rhs)EXPR: 
+			    rhs := DYAD(op, HEAP EXPR:=lhs, HEAP EXPR:=rhs)) OREL missing expression 
+		    FI
+		FI; TRUE
+	    ELSE
+		FALSE
+	    FI
+	END;
+
+	match priority (obj, UPB dyop, default)
+    END;
+
+    OP MATCH = (REF REF[]EXPR args)BOOL:
+    BEGIN
+        # lets perform a neat trick to avoid resizing arrays #
+	PROC recurse = (INT i)VOID:
+	BEGIN
+	    EXPR arg; 
+	    REQUIRE arg;
+	    IF MATCH "," THEN recurse(i+1) ELSE args := HEAP [i] EXPR FI;
+	    args[i] := arg
+	END;
+	recurse(1); TRUE
+    END;
+
+    OP MATCH = (REF TYPE spec)BOOL:
+    BEGIN
+	[]STRING prim types = ("Int", "Bool", "Void");
+	IDENT id;
+	IF MATCH id THEN 
+	    spec := id; TRUE
+	ELIF MATCH prim types THEN
+	    spec := matched symbol; TRUE
+	ELIF MATCH "[" THEN
+	    REQUIRE spec;
+	    spec := LISTT(HEAP TYPE:=spec, ~);
+	    REQUIRE "]"; TRUE
+	ELIF MATCH "(" THEN
+	    HEAP TYPE lt, rt;
+	    REQUIRE lt;
+	    REQUIRE ",";
+	    REQUIRE rt;
+	    spec := PAIRT(lt, rt);
+	    REQUIRE ")"; TRUE
+	ELSE 
+	    FALSE
+	FI
+    END;
+
+
+    OP MATCH = (REF STM stm)BOOL:
+    BEGIN
+	TYPE type;
+	IDENT id;
+	EXPR expr;
+	IF MATCH "{" THEN
+	    stm := parse statements; TRUE
+	ELIF MATCH "return" THEN
+	    stm := RETURN((MATCH expr | expr | EMPTY), pos#!#);
+	    REQUIRE ";"; TRUE
+	ELIF MATCH "if" THEN
+	    REQUIRE "("; REQUIRE expr; REQUIRE ")";
+	    STM then, else; REQUIRE then;
+	    IF MATCH "else" THEN
+		REQUIRE else;
+		stm := IFSTM(expr, HEAP STM:=then, HEAP STM:=else); TRUE
+	    ELSE
+		stm := IFSTM(expr, HEAP STM:=then, NIL); TRUE
+	    FI
+	ELIF MATCH "while" THEN
+	    REQUIRE "("; REQUIRE expr; REQUIRE ")";
+	    HEAP STM body; REQUIRE body;
+	    stm := WHILESTM(expr, body); TRUE
+	ELIF MATCH id THEN
+	    IF MATCH "=" THEN
+		REQUIRE expr;
+		stm := ASSIGN(id, expr)
+	    ELIF MATCH "(" THEN
+		stm := FUNCALL(id, parse arguments)
+	    ELSE
+		IDENT name; REQUIRE name; REQUIRE "="; REQUIRE expr;
+		stm := DECLSTM(id,name,expr)
+	    FI; REQUIRE ";"; TRUE
+	ELIF MATCH type THEN
+	    IDENT name; REQUIRE name; REQUIRE "="; REQUIRE expr;
+	    stm := DECLSTM(type,name,expr); 
+	    REQUIRE ";"; TRUE
+	ELSE
+	    FALSE
+	FI
+    END;
+
+    PROC parse statements = REF STMLIST:
+    BEGIN
+	IF MATCH "}" THEN NIL ELSE
+	    STM stm; REQUIRE stm;
+	    HEAP STMLIST:=(stm, parse statements)
+	FI
+    END;
+
+    OP MATCH = (REF DECL decl)BOOL:
+	IF TYPE ret type; MATCH ret type THEN
+	    IDENT id; REQUIRE id;
+	    IF MATCH "=" THEN
+		HEAP EXPR expr; REQUIRE expr; REQUIRE ";";
+		decl := DECLSTM(ret type, id, expr)
+	    ELSE
+		REF[]PARAM formal args := no formal args;
+		PROC gather formal args = (INT i)VOID:
+		BEGIN
+		    TYPE type; REQUIRE type;
+		    IDENT id;  REQUIRE id;
+		    IF MATCH "," THEN gather formal args(i+1) ELSE formal args := HEAP [i] PARAM FI;
+		    formal args[i] := (type, id)
+		END;
+
+		REQUIRE "(";
+		IF NOT MATCH ")" THEN gather formal args(1); REQUIRE ")" FI;
+		REQUIRE "{";
+		decl := DECLFUN(ret type, id, formal args, parse statements)
+	    FI; TRUE
+	ELSE
+	    FALSE
+	FI;
+
+    OP MATCH = (REF DECLS prog)BOOL:
+    BEGIN
+	DECL head;
+	IF MATCH head THEN
+	    prog := DECLS(head, (MATCH prog|HEAP DECLS:=prog|NIL));
+	    TRUE
+	ELSE
+	    FALSE
+	FI
+    END;
+
+    #-----------------------------------------#
+
+    DECLS program;
+    IF MATCH program THEN
+	7DEBUG (VOID: DUMP( program) )
+    ELSE
+	complain ("cowardly refusing to compile an empty program")
+    FI;
+
+    IF (token|(VOID):FALSE|TRUE) THEN
+	complain ("stray junk at end of program: "+
+	    (token|(IDENT id): name OF id,
+	           (SYMBOL s): repr OF s,
+		   (INT i): whole(i,0)))
+    FI;
+
+    # syntax error messages #
+
+    OP REQUIRE = ([] CHAR sym)VOID:
+	(MATCH sym | TRUE | complain ("expecting `"+sym+"'"));
+    OP REQUIRE = (CHAR sym)VOID:
+	(MATCH sym | TRUE | complain ("expecting `"+sym+"'"));
+    OP REQUIRE = (REF TYPE type)VOID:
+	(MATCH type | TRUE | complain ("invalid type specifier"));
+    OP REQUIRE = (REF STM stm)VOID:
+	(MATCH stm | TRUE | complain ("statement expected"));
+    OP REQUIRE = (REF EXPR expr)VOID:
+	(MATCH expr | TRUE | complain ("illegal expression"));
+    OP REQUIRE = (REF IDENT id)VOID:
+	(MATCH id | TRUE | complain ("identifier expected"));
+    PROC missing expression = BOOL:
+	(complain ("illegal operator"); halt);
+
+    program
+END;
+
+PROC parse file = (STRING file name)DECLS:
+BEGIN
+    FILE src;
+    open(src, file name, standin channel);
+    parse input(src)
+END;
+

@@ -1,0 +1,72 @@
+PR include "ast.a68" PR
+
+OP DUMP = (INT i)VOID: print(whole(i,0));
+OP DUMP = (STRING sym)VOID: print((sym,space));
+OP DUMP = (SYMBOL sym)VOID: DUMP(repr OF sym);
+OP DUMP = (CONST i)VOID: print((whole(int OF i,0),space));
+OP DUMP = (IDENT id)VOID: DUMP(name OF id);
+OP DUMP = (MONAD t)VOID:
+    (DUMP op OF t, DUMP lhs OF t);
+OP DUMP = (DYAD t)VOID:
+    (DUMP op OF t, DUMP lhs OF t, DUMP rhs OF t);
+OP DUMP = (FUNCALL t)VOID:
+    (DUMP id OF t, FOR i TO UPB args OF t DO DUMP (args OF t)[i] OD);
+OP DUMP = (TUPLE t)VOID:
+    (DUMP lhs OF t, DUMP rhs OF t);
+OP DUMP = (REF EXPR t)VOID:
+    (CASE t IN
+    	(SYMBOL x): (print("(symbol "); DUMP x),
+    	(CONST x):  (print("(int "); DUMP x),
+    	(MONAD x):  (print("(monad "); DUMP x),
+    	(DYAD x):   (print("(dyad "); DUMP x),
+    	(TUPLE x):  (print("(tuple "); DUMP x),
+    	(IDENT x):  (print("(ident "); DUMP x),
+    	(FUNCALL x):(print("(funcall "); DUMP x)
+    ESAC; print(")"));
+
+OP DUMP = (DECLSTM x)VOID:
+    (DUMP (LOC TYPE:=type OF x), DUMP id OF x, DUMP (LOC EXPR:=value OF x));
+OP DUMP = (IFSTM x)VOID:
+    (DUMP (LOC EXPR:=cond OF x), DUMP then OF x, (else OF x IS NIL|~|DUMP else OF x));
+OP DUMP = (WHILESTM x)VOID:
+    (DUMP (LOC EXPR:=cond OF x), DUMP body OF x);
+OP DUMP = (ASSIGN x)VOID:
+    (DUMP id OF x; DUMP (LOC EXPR:=value OF x));
+OP DUMP = (REF STMLIST x)VOID: 
+    (IF x ISNT NIL THEN DUMP stm OF x; DUMP tail OF x FI);
+OP DUMP = (REF STM x)VOID: 
+    (CASE x IN
+      (DECLSTM x): (print("[decl "); DUMP x),
+      (IFSTM x):   (print("[if "); DUMP x),
+      (WHILESTM x):(print("[while "); DUMP x),
+      (ASSIGN x):  (print("[:= "); DUMP x),
+      (FUNCALL x): (print("[call "); DUMP x),
+      (RETURN x):  (print("[return "); (value OF x|(EXPR e):DUMP (LOC EXPR:=e)|~)),
+      (REF STMLIST x): (print("{"); DUMP x; print("}"))
+    ESAC; print ("]"));
+
+OP DUMP = (PARAM x)VOID:
+    (print("<"); DUMP (LOC TYPE:=type OF x); DUMP id OF x; print(">"));
+OP DUMP = (DECLFUN x)VOID:
+    (DUMP (LOC TYPE:=ret OF x); DUMP id OF x;
+     FOR i TO UPB args OF x DO DUMP (args OF x)[i] OD;
+     DUMP body OF x);
+OP DUMP = (DECLS x)VOID:
+    (DUMP (LOC DECL:=decl OF x); IF tail OF x ISNT NIL THEN DUMP tail OF x FI);
+OP DUMP = (REF DECL x)VOID:
+    (CASE x IN
+      (DECLFUN f): (print("<fun "); DUMP f),
+      (DECLSTM s): (print("<stm "); DUMP s)
+    ESAC; print ((">",new line)));
+
+OP DUMP = (REF TYPE t)VOID:
+    CASE t IN
+      (SYMBOL s): DUMP s,
+      (IDENT i) : (print("'"); DUMP i),
+      (LISTT t) : (print("[]"); DUMP (LOC TYPE:=lt OF t)),
+      (PAIRT t) : (print("(,)"); DUMP (LOC TYPE:=lt OF t); DUMP (LOC TYPE:=rt OF t)),
+      (FUNT t)  : (print("->"); 
+                  FOR i TO UPB args OF t DO DUMP (LOC TYPE:=(args OF t)[i]) OD;
+                  DUMP (LOC TYPE:=ret OF t)) 
+    ESAC;
+

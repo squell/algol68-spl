@@ -1,0 +1,144 @@
+PR include "ast.a68" PR
+PR include "util.a68" PR
+
+OP REPR = (TYPE t)STRING:
+    CASE t IN
+      (SYMBOL s): repr OF s,
+      (IDENT i) : name OF i,
+      (LISTT t) : "[" + REPR lt OF t + "]",
+      (PAIRT t) : "(" + REPR lt OF t + "," + REPR rt OF t + ")",
+      (FUNT t)  : 
+          BEGIN
+	      STRING s := "";
+	      FOR i TO UPB args OF t DO 
+	         s +:= (i > 1|s+:=","|~) + REPR (args OF t)[i] OD;
+	      "(" + s + ")->" + REPR ret OF t
+	  END
+    ESAC;
+
+PROC pretty print = (DECLS program)VOID:
+BEGIN
+
+[][]STRING dyop =
+        (("*", "/", "%"), ("+","-"),
+         (">","<","<=",">="), ("==", "!="),
+         ("&&"), ("||"), (":"));
+
+PROC level of dyop = (SYMBOL op)INT:
+    (INT result; FOR i TO UPB dyop DO
+	IF repr OF op MEMBER dyop[result:=i] THEN return FI
+     OD; return: result);
+
+PROC parenthesize = (REF EXPR t,INT lvl)VOID:
+    (t|(DYAD d):(lvl<level of dyop(op OF d)|print("(");Pt;print(")")|Pt)|Pt);
+
+INT indentation := 0;
+
+PROC indent = (REF FILE f)VOID: (new line(f); print(indentation*" "));
+
+PROC next indent = (REF FILE f)VOID: 
+    (indentation +:= 4);
+PROC prev indent = (REF FILE f)VOID: 
+    (indentation -:= 4);
+
+OP P = (STRING s)VOID: print(s);
+OP P = (CONST i)VOID: print(whole(int OF i,0));
+OP P = (MONAD t)VOID:
+    (P op OF t, parenthesize (lhs OF t,0));
+OP P = (DYAD t)VOID:
+    (INT lvl = level of dyop(op OF t);
+     parenthesize (lhs OF t,lvl); 
+     (lvl>2|print(space);P op OF t; print(space)|P op OF t);
+     parenthesize (rhs OF t,lvl-1));
+OP P = (FUNCALL t)VOID:
+    (P id OF t; print("("); 
+     FOR i TO UPB args OF t DO (i > 1|print(", ")|~); P (args OF t)[i] OD; 
+     print (")"));
+OP P = (TUPLE t)VOID:
+    (print("("); P lhs OF t; print(","); P rhs OF t; print(")"));
+OP P = (REF EXPR t)VOID:
+    CASE t IN
+    	(SYMBOL x):  Px,
+    	(CONST x):   Px,
+    	(MONAD x):   Px,
+    	(DYAD x):    Px,
+    	(TUPLE x):   Px,
+    	(IDENT x):   Px,
+    	(FUNCALL x): Px
+    ESAC;
+
+OP P = (DECLSTM x)VOID:
+    (print(indent);
+     P (LOC TYPE:=type OF x); print(space); 
+     P id OF x; print(" = ");
+     P (LOC EXPR:=value OF x); print(";"));
+
+PROC k and r = (STM x, PROC (REF FILE)VOID a,b)PROC (REF FILE)VOID:
+    (x| (REF STMLIST s):a | b);
+
+OP P = (IFSTM x)VOID:
+    (print((indent,"if(")); 
+     P (LOC EXPR:=cond OF x); 
+     print((")", k and r(then OF x,space,next indent)));
+     P then OF x; 
+     print(k and r(then OF x,(REF FILE f)VOID:SKIP,prev indent));
+     IF else OF x ISNT NIL THEN
+	 print((k and r(then OF x,space,indent),
+	        "else",
+	        k and r(else OF x,space,next indent)));
+ 	 P else OF x;
+	 print(k and r(else OF x,(REF FILE f)VOID:SKIP,prev indent))
+     FI); 
+OP P = (WHILESTM x)VOID:
+    (print((indent,"while("));
+     P (LOC EXPR:=cond OF x); 
+     print((")",k and r(body OF x,space,next indent)));
+     P body OF x;
+     print(prev indent));
+OP P = (ASSIGN x)VOID:
+    (print(indent);
+     P id OF x; print((" = ")); 
+     P (LOC EXPR:=value OF x); print(";"));
+OP P = (REF STMLIST x)VOID: 
+    (print(("{", next indent));
+     REF STMLIST cur := x;
+     WHILE REF STMLIST(cur) ISNT NIL DO
+	P stm OF cur;
+	cur := tail OF cur 
+     OD;
+     print((prev indent,indent, "}")));
+OP P = (REF STM x)VOID: 
+    CASE x IN
+      (DECLSTM x): Px,
+      (IFSTM x):   Px,
+      (WHILESTM x):Px,
+      (ASSIGN x):  Px,
+      (FUNCALL x): (print(indent);P(LOC EXPR:=x);print(";")),
+      (RETURN x):  (print((indent,"return"));
+                    (value OF x|(EXPR e):(print(space);P(LOC EXPR:=e))|~);
+		    print(";")),
+      (REF STMLIST x): Px
+    ESAC;
+
+OP P = (PARAM x)VOID:
+    (P (LOC TYPE:=type OF x); print(space); P id OF x);
+OP P = (DECLFUN x)VOID:
+    (print(indent); P (LOC TYPE:=ret OF x); print(space); P id OF x;
+     print("(");
+     FOR i TO UPB args OF x DO (i>1|print(", ")|~); P (args OF x)[i] OD;
+     print((")", new line));
+     P body OF x),
+OP P = (DECLS x)VOID:
+    (P (LOC DECL:=decl OF x); print(new line);
+     IF tail OF x ISNT NIL THEN P tail OF x FI);
+OP P = (REF DECL x)VOID:
+    CASE x IN
+      (DECLFUN f): P f,
+      (DECLSTM s): P s
+    ESAC;
+
+OP P = (TYPE t)VOID: print(REPR t);
+
+    P program
+END;
+

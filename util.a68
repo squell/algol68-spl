@@ -1,0 +1,63 @@
+
+#
+    overloaded "container" functions - rows
+#
+
+PRIO MEMBER = 9;
+OP MEMBER = (STRING word, []STRING row)BOOL:
+    ((STRING s)BOOL: word = s) MEMBER row;
+
+OP MEMBER = (PROC(STRING)BOOL pred, []STRING row)BOOL:
+    pred INDEX row > 0;
+
+PRIO INDEX = 9;
+OP INDEX = (STRING key, []STRING row)INT:
+    ((STRING s)BOOL: key = s) INDEX row;
+
+PRIO RINDEX = 9;
+OP RINDEX = (STRING key, []STRING row)INT:
+    ((STRING s)BOOL: key = s) RINDEX row;
+
+OP INDEX = (PROC(STRING)BOOL pred, []STRING row)INT:
+BEGIN
+    []STRING row mod = row[@1];
+    INT result := 0;
+    FOR i TO UPB row mod WHILE result = 0 DO
+        IF pred(row mod[i]) THEN result := i FI
+    OD;
+    result
+END;
+
+OP RINDEX = (PROC(STRING)BOOL pred, []STRING row)INT:
+BEGIN
+    []STRING row mod = row[@1];
+    INT result := 0;
+    FOR i FROM UPB row BY -1 TO 1 WHILE result = 0 DO
+        IF pred(row mod[i]) THEN result := i FI
+    OD;
+    result
+END;
+
+PRIO INSIDE = 9;
+OP INSIDE = (STRING key, REF[]STRING row)REF STRING:
+    ((STRING s)BOOL: key = s) INSIDE row;
+
+OP INSIDE = (PROC(STRING)BOOL pred, REF[]STRING row)REF STRING:
+BEGIN
+    REF STRING result := NIL;
+    FOR i FROM LWB row TO UPB row DO
+        IF pred(row[i]) THEN result := row[i]; break FI
+    OD;
+break:
+    result
+END;
+
+#
+    use multiple debugging levels so we can leave trace statements in our code
+#
+
+INT debug level := 10;
+
+PRIO DEBUG = 9;
+OP DEBUG = (INT level, PROC VOID what)VOID: (level<debug level|what|~);
+

@@ -1,0 +1,6 @@
+PR include "parser.a68" PR
+PR include "astprint.a68" PR
+
+BEGIN
+    pretty print (parse file("test.spl"))
+END

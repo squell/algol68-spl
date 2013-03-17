@@ -1,0 +1,39 @@
+PR include "ast.a68" PR
+
+CO
+    implementing a visitor-like pattern in ALGOL68; while nice, it also uses
+    conformity clauses a lot and so is probably not very efficient
+
+    it only walks over 'similar' nodes, i.e. if doing statements, will not
+    automatically recurse into expressions or types
+CO
+
+MODE ASTNODE = UNION(STM,PARAM,DECL,REF DECLS,TYPOID);
+
+PROC walk = (ASTNODE root, PROC (ASTNODE,PROC VOID)VOID visitor)VOID:
+BEGIN
+    PROC cont = (ASTNODE root)VOID: walk(root,visitor);
+
+    visitor(root, VOID:
+	CASE root IN
+	    (MONAD n):
+		cont(lhs OF n),
+	    (DYAD  n):
+		(cont(lhs OF n); cont(rhs OF n)),
+	    (TUPLE n):
+		(cont(lhs OF n); cont(rhs OF n)),
+	    (FUNCALL n): 
+		FOR i TO UPB args OF n DO cont((args OF n)[i]) OD,
+	    (IFSTM n):
+		(cont(then OF n); IF else OF n ISNT NIL THEN cont(else OF n) FI),
+	    (WHILESTM n):
+		cont(body OF n),
+	    (REF STMLIST n):
+		(cont(stm OF n); cont(tail OF n)),
+	    (REF DECLS n):
+		(cont(decl OF n); cont(tail OF n))
+	OUT
+	    SKIP
+	ESAC)
+END;
+
