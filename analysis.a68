@@ -1,0 +1,246 @@
+PR include "ast.a68" PR
+PR include "dict.a68" PR
+
+#TODO: type balacngin #
+
+PROC semantic analysis = (REF DECLS ast)VOID:
+BEGIN
+    TYPE void     := SYMBOL("Void", ~);
+    TYPE integral := SYMBOL("Int", ~);
+    TYPE boolean  := SYMBOL("Bool", ~);
+    TYPE placeholder := SYMBOL("*", ~);
+
+    PROC complain = (STRING why, []INT pos)REF STMLIST:
+    BEGIN
+        put (stand error, (pos,":",why,new line));
+        halt
+    END;
+
+    # cleverly using the dictionary to reason about scope #
+
+    DICT symbols := new dictionary (64);
+    [LWB symbols:UPB symbols]INT cur scope;
+    []INT global scope = cur scope := mark(symbols);
+
+    PROC make symbol = (IDENT id, DECL decl, INT info)VOID:
+	IF retrieve (slice(symbols,cur scope), name OF id, LOC DECLINFO) THEN
+	    complain ("`"+name OF id+"' already defined", pos OF id)
+	ELSE
+	    assert(symbols, name OF id, DECLINFO(decl,info))
+	FI;
+
+    PROC get symbol = (IDENT id)DECLINFO:
+	IF DECLINFO found; retrieve (symbols, name OF id, found) THEN 
+	    found 
+	ELSE
+	    complain("unknown identifier: `"+name OF id+"'", pos OF id); ~
+	FI;
+
+    PROC get var type = (IDENT id)TYPE:
+	(decl OF get symbol(id) | (DECLSTM decl): type OF decl | 
+	   complain("`"+name OF id+"' is not assignable", pos OF id); ~ );
+
+    PROC get fun signature = (IDENT id)[]PARAM:
+	(decl OF get symbol(id) | (DECLFUN fun): args OF fun | 
+	   complain("`"+name OF id+"' is not a function", pos OF id); ~ );
+
+    INT frame size;
+    INT frame offset;
+
+    PROC new offset = INT:
+        (IF (frame offset+:=1) > frame size THEN frame size := frame offset FI;
+	 frame offset);
+
+    PROC new scope = (PROC VOID whatever)VOID:
+	([]INT outer scope = cur scope;
+	 []INT restore = cur scope := mark(symbols); 
+	 INT offset := frame offset;
+	 whatever; 
+	 frame offset := offset;
+	 release(symbols, restore);
+	 cur scope := outer scope);
+
+    # normalize the sub statements of if/then/else and while statements #
+
+    PROC sub statement = (REF STM s)REF STMLIST:
+	IF s IS NIL THEN
+	    NIL
+	ELSE CASE s IN 
+	(DECLSTM d): 
+	    complain("declaration not allowed at this point", pos OF id OF d),
+	(REF STMLIST bloc):
+	    bloc
+	OUT 
+	    HEAP STMLIST:=(s, NIL)
+	ESAC FI;
+
+    # two routines easing iteration #
+
+    PROC for each decl = (REF DECLS list, PROC (REF DECL)VOID p)VOID:
+	(REF DECLS cur := list;
+	 WHILE REF DECLS(cur) ISNT NIL DO p(decl OF cur); cur := tail OF cur OD);
+    PROC for each stm = (REF STMLIST list, PROC (REF STM)VOID p)VOID:
+        (REF STMLIST cur := list;
+	 WHILE REF STMLIST(cur) ISNT NIL DO p(stm OF cur); cur := tail OF cur OD);
+
+    for each decl(ast, (REF DECL this)VOID:
+	CASE this IN
+	(DECLSTM decl):
+	    ( cur scope := global scope;
+	      value OF decl => type OF decl;
+	      make symbol (id OF decl, this, 0) ),
+	(DECLFUN function):
+	    ( cur scope := global scope;
+	      make symbol (id OF function, this, 0);
+	      frame size := frame offset := 0;
+
+	      []INT restore point = cur scope := mark (symbols);
+	      FOR i TO UPB args OF function DO
+		  make symbol (id OF (args OF function)[i], this, i)
+	      OD;
+	      for each stm(body OF function, process stm);
+
+	      PROC process stm = (REF STM stm)VOID:
+		  CASE stm IN
+		  (RETURN v):
+		      (value OF v|(EXPR e): e => ret OF function,
+		                  (VOID)  : type identical(void, ret OF function, pos OF v)),
+		  (FUNCALL e):
+		      check function call (e),
+		  (ASSIGN a):
+		      value OF a => get var type (id OF a),
+		  (REF STMLIST bloc):
+		      new scope(VOID: for each stm(bloc, process stm)),
+		  (IFSTM if):
+		      ( cond OF if => boolean;
+		        REF STMLIST then = sub statement(then OF if);
+		        REF STMLIST else = sub statement(else OF if);
+			then OF if := then;
+			else OF if := else;
+			new scope(VOID: for each stm(then, process stm));
+			new scope(VOID: for each stm(else, process stm)) ),
+		  (WHILESTM wh):
+		      ( cond OF wh => boolean;
+		        REF STMLIST body = sub statement(body OF wh);
+			body OF wh := body;
+			new scope(VOID: for each stm(body, process stm)) ),
+		  (DECLSTM decl):
+		      ( value OF decl => type OF decl,
+			make symbol (id OF decl, decl, new offset) )
+		  OUT
+		      complain("fatal: compiler is incomplete!", (0,0))
+		  ESAC;
+
+	      frame size OF function := frame size;
+	      release (symbols, restore point)
+	    )
+	ESAC
+    );
+
+    PROC check function call = (FUNCALL call)TYPE:
+    BEGIN
+	[]PARAM sign = get fun signature (id OF call);
+	IF UPB args OF call /= UPB sign THEN
+	    complain ("wrong number of arguments in call", pos OF id OF call)
+	ELSE
+	    FOR i TO UPB args OF call DO
+		(args OF call)[i] => type OF sign[i]
+	    OD
+	FI;
+	type OF sign[0]
+    END;
+
+    PRIO => = 5;
+    OP => = (EXPR expr, TYPE type)VOID: 
+    CASE expr IN
+	(SYMBOL s): 
+	    IF s = "True" OR s = "False" THEN 
+		type identical (boolean, type, pos OF s)
+	    ELIF s = "[]" THEN 
+		(type| (LISTT t):~ | unification error(LISTT(placeholder,0), type, pos OF s))
+	    ELSE
+		complain ("fatal: illegal symbol?!", ~)
+	    FI,
+	(CONST i):
+	    type identical (integral, type, pos OF i),
+	(MONAD m):
+	    IF op OF m = "-" THEN 
+		type identical (integral, type, pos OF op OF m);
+		lhs OF m => integral
+	    ELIF op OF m = "!" THEN 
+		type identical (boolean, type, pos OF op OF m);
+		lhs OF m => boolean
+	    ELSE complain("fatal: illegal operator?!", ~)
+	    FI,
+	(DYAD d):
+	    IF char in string ((repr OF op OF d)[1], NIL, "&|") THEN
+		type identical (boolean, type, pos OF op OF d);
+		lhs OF d => boolean;
+		rhs OF d => boolean
+	    ELIF char in string ((repr OF op OF d)[1], NIL, "=<>") THEN
+		type identical (boolean, type, pos OF op OF d);
+		# TODO?: overloaded comparison? #
+		lhs OF d => integral;
+		rhs OF d => integral
+	    ELIF op OF d = ":" THEN
+	    # todo #
+		CASE type IN (LISTT lstt):
+		    (lhs OF d => lt OF lstt; rhs OF d => lstt)
+		OUT unification error (LISTT(placeholder,0), type, pos OF op OF d)
+		ESAC
+	    ELSE 
+		type identical (integral, type, pos OF op OF d);
+		rhs OF d => integral;
+		lhs OF d => integral
+	    FI,
+	(TUPLE t):
+	    CASE type IN (PAIRT p):
+		(lhs OF t => lt OF p; rhs OF t => rt OF p)
+	    OUT unification error (PAIRT(placeholder,placeholder), type, pos OF t)
+	    ESAC,
+	(IDENT id):
+	    BEGIN
+		DECLINFO var = get symbol (id);
+		info OF id := var;
+		CASE decl OF var IN
+		    (DECLSTM decl):
+			type identical (type OF decl, type, pos OF id),
+		    (DECLFUN fun): 
+		        IF pos OF var = 0 THEN
+		            complain("function `"+name OF id+"' used in a "+REPR type+" context", pos OF id) 
+			ELSE
+			    type identical (type OF (args OF fun)[pos OF var], type, pos OF id)
+		        FI
+		ESAC
+	    END,
+	(FUNCALL f):
+	    type identical (check function call(f), type, pos OF id OF f)
+    ESAC;
+
+    PROC type identical = (TYPE src, tgt, []INT pos)VOID:
+	(src = tgt | ~ | unification error(src, tgt, pos));
+
+    PROC unification error = (TYPE src, tgt, []INT pos)VOID:
+	complain ("cannot unify types: `"+REPR src+"' found but `"+REPR tgt+"' expected", pos);
+
+    OP = = (TYPE a, b)BOOL:
+    CASE a IN
+	(SYMBOL sa): (b|(SYMBOL sb):repr OF sa=repr OF sb|FALSE),
+	(LISTT  la): (b|(LISTT lb):lt OF la = lt OF lb|FALSE),
+	(PAIRT  pa): (b|(PAIRT pb):lt OF pa = lt OF pb AND
+				   rt OF pa = rt OF pb|FALSE),
+	(IDENT  ia): (b|(IDENT ib):name OF ia = name OF ib|FALSE)
+	OUT FALSE
+    ESAC;
+
+~
+END;
+
+PR include "parser.a68" PR
+PR include "astprint.a68" PR
+
+(DECLS prog := parse file("test.spl");
+ semantic analysis(prog);
+ ~
+ )
+
