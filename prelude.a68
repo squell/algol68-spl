@@ -1,0 +1,49 @@
+PR include "ast.a68" PR
+PR include "dict.a68" PR
+
+COMMENT
+    the builtin functions. 
+    
+    also showcases the direct implementation of the type system
+COMMENT
+
+PROC add prelude = (REF DICT symbol table)VOID:
+BEGIN
+    []STRING name = (
+	"hd", "tl", "isEmpty", "fst", "snd", "print"
+    );
+
+    CO create the type placeholders (unifiers) CO
+
+    [8]PARAM t;
+    FOR i TO UPB t DO t[i] := (HEAP TYPE:=0, ("t",(0,0),NIL)) OD;
+
+    CO associate them with the various functions CO
+
+    HEAP[UPB name]FLEX[1:0]PARAM morphity := (
+	t[1], t[2], t[3], (t[4],t[5]), (t[6],t[7]), t[8]
+    );
+
+    CO a list of return type,argument type CO
+
+    PROC tuple = (PARAM t,u)PARAM: (HEAP TYPE:=PAIRT(type OF t,type OF u), ("x",(0,0),NIL));
+    PROC list  = (PARAM t)PARAM:   (HEAP TYPE:=LISTT(type OF t,0), ("x",(0,0),NIL));
+    PROC prim  = (STRING t)PARAM:  (HEAP TYPE:=SYMBOL(t,~), ("x",(0,0),NIL));
+
+    HEAP[UPB name,2]PARAM signature := (
+	(t[1],         list(t[1])),
+	(list(t[2]),   list(t[2])),
+	(prim("Bool"), list(t[3])),
+	(t[4],         tuple(t[4],t[5])),
+	(t[7],         tuple(t[6],t[7])),
+	(prim("Void"), t[8])
+    );
+
+    CO add to the symbol table - signatures only CO
+
+    FOR i TO UPB name DO
+	DECLFUN fun = (signature[i,][@0], NIL, NIL, morphity[i]);
+	assert(symbol table, name[i], DECLINFO(fun,0))
+    OD
+END;
+
