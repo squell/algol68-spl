@@ -48,7 +48,7 @@ OP DUMP = (REF STM x)VOID:
 OP DUMP = (PARAM x)VOID:
     (print("<"); DUMP (LOC TYPE:=type OF x); DUMP id OF x; print(">"));
 OP DUMP = (DECLFUN x)VOID:
-    (DUMP (LOC TYPE:=ret OF x); DUMP id OF x;
+    (DUMP (LOC TYPE:=ret type (x)); DUMP function id(x);
      FOR i TO UPB args OF x DO DUMP (args OF x)[i] OD;
      DUMP body OF x);
 OP DUMP = (DECLS x)VOID:

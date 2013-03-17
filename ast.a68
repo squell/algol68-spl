@@ -51,7 +51,8 @@ MODE RETURN  = STRUCT(UNION(EXPR,VOID) value, [2]INT pos);
 MODE STM     = UNION(REF STMLIST,IFSTM,WHILESTM,ASSIGN,DECLSTM,FUNCALL,RETURN);
 MODE STMLIST = STRUCT(STM stm, REF STMLIST tail);
 
-MODE DECLFUN = STRUCT(TYPE ret, IDENT id, REF[]PARAM args, REF STMLIST body, REF INT frame size);
+MODE DECLFUN = STRUCT(REF[]PARAM args, REF STMLIST body, REF INT frame size);
+MODE PARAMS  = REF[]PARAM;
 MODE PARAM   = STRUCT(TYPE type, IDENT id);
 
 MODE DECL    = UNION(DECLFUN,DECLSTM);
@@ -70,6 +71,9 @@ MODE UNIFIER = INT; # only used as a placeholder type #
 
 []STRING reserved words = 
     ("Void", "Int", "Bool", "True", "False","if","while","else","return");
+
+PROC function id = (DECLFUN decl)IDENT: id OF (args OF decl)[0];
+PROC ret type = (DECLFUN decl)TYPE: type OF (args OF decl)[0];
 
 OP = = (SYMBOL t, STRING s)BOOL: s = repr OF t;
 OP = = (SYMBOL t, CHAR s)BOOL: s = repr OF t;

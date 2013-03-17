@@ -10,7 +10,6 @@ CO
 CO
 BEGIN
     HEAP[0]EXPR no args;
-    HEAP[0]PARAM no formal args;
 
     MODE TOKEN = UNION(INT, SYMBOL, IDENT, VOID);
 
@@ -305,19 +304,24 @@ BEGIN
 		HEAP EXPR expr; REQUIRE expr; REQUIRE ";";
 		decl := DECLSTM(ret type, id, expr)
 	    ELSE
-		REF[]PARAM formal args := no formal args;
+		PARAMS formal args;
 		PROC gather formal args = (INT i)VOID:
 		BEGIN
 		    TYPE type; REQUIRE type;
 		    IDENT id;  REQUIRE id;
-		    IF MATCH "," THEN gather formal args(i+1) ELSE formal args := HEAP [i] PARAM FI;
+		    IF MATCH "," THEN gather formal args(i+1) ELSE formal args := HEAP [0:i] PARAM FI;
 		    formal args[i] := (type, id)
 		END;
 
 		REQUIRE "(";
-		IF NOT MATCH ")" THEN gather formal args(1); REQUIRE ")" FI;
+		IF NOT MATCH ")" THEN 
+		    gather formal args(1); REQUIRE ")" 
+		ELSE
+		    formal args := HEAP[0:0] PARAM
+		FI;
 		REQUIRE "{";
-		decl := DECLFUN(ret type, id, formal args, parse statements, HEAP INT)
+		formal args[0] := (ret type, id);
+		decl := DECLFUN(formal args, parse statements, HEAP INT)
 	    FI; TRUE
 	ELSE
 	    FALSE

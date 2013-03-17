@@ -124,7 +124,7 @@ OP P = (REF STM x)VOID:
 OP P = (PARAM x)VOID:
     (P (LOC TYPE:=type OF x); print(space); P id OF x);
 OP P = (DECLFUN x)VOID:
-    (print(indent); P (LOC TYPE:=ret OF x); print(space); P id OF x;
+    (print(indent); P (LOC TYPE:=ret type (x)); print(space); P function id (x);
      print("(");
      FOR i TO UPB args OF x DO (i>1|print(", ")|~); P (args OF x)[i] OD;
      print((")", new line));

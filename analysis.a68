@@ -40,7 +40,7 @@ BEGIN
 	(decl OF get symbol(id) | (DECLSTM decl): type OF decl | 
 	   complain("`"+name OF id+"' is not assignable", pos OF id); ~ );
 
-    PROC get fun signature = (IDENT id)[]PARAM:
+    PROC get fun signature = (IDENT id)PARAMS:
 	(decl OF get symbol(id) | (DECLFUN fun): args OF fun | 
 	   complain("`"+name OF id+"' is not a function", pos OF id); ~ );
 
@@ -91,7 +91,7 @@ BEGIN
 	      make symbol (id OF decl, this, 0) ),
 	(DECLFUN function):
 	    ( cur scope := global scope;
-	      make symbol (id OF function, this, 0);
+	      make symbol (function id (function), this, 0);
 	      frame size := frame offset := 0;
 
 	      []INT restore point = cur scope := mark (symbols);
@@ -103,8 +103,8 @@ BEGIN
 	      PROC process stm = (REF STM stm)VOID:
 		  CASE stm IN
 		  (RETURN v):
-		      (value OF v|(EXPR e): e => ret OF function,
-		                  (VOID)  : type identical(void, ret OF function, pos OF v)),
+		      (value OF v|(EXPR e): e => ret type(function),
+		                  (VOID)  : type identical(void, ret type(function), pos OF v)),
 		  (FUNCALL e):
 		      check function call (e),
 		  (ASSIGN a):
@@ -139,7 +139,7 @@ BEGIN
 
     PROC check function call = (FUNCALL call)TYPE:
     BEGIN
-	[]PARAM sign = get fun signature (id OF call);
+	PARAMS sign = get fun signature (id OF call);
 	IF UPB args OF call /= UPB sign THEN
 	    complain ("wrong number of arguments in call", pos OF id OF call)
 	ELSE
