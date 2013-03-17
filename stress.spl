@@ -1,14 +1,31 @@
-/* this is mainly an exposition of some of the gotchas that occur during
-   expression parsing */
+// our pretty printer should not only print code correctly, but not 
+// introduce parentheses or braces where they are not needed
 
-fnord main()
+fnord/**/main()  // should not paste tokens together!
 {{
     if([])
-    if (([] : -(1*[])-(2*[]-3*[])-4/[]/-5): (1*[])-(2+[])--3*(4+[])) 
-    {
+      if (([] : -(1*[])-(2*[]-3*[])-4/[]/-5): (1*[])-(2+[])--3*(4+[])) 
+      {
 	return !1:2; /* should parse as (!1):2, not !(1:2) */
 	[([foo],bar)] y = this_is_fine((1,(2,3))); 
-    } 
-    else [Void] x = not_allowed((1),2); /* caught in next phase */
+      } 
+    else Void//
+x = not_allowed((1),2); /* caught in next phase */
 }}
 
+/* output:
+
+fnord main()
+{
+    {
+        if([])
+            if(([] : -(1*[])-(2*[]-3*[])-4/[]/-5) : 1*[]-(2+[])--3*(4+[])) {
+                return !1 : 2;
+                [([foo],bar)] y = this_is_fine((1,(2,3)));
+            } else
+                [Void] x = not_allowed(1, 2);
+    }
+}
+
+
+*/
