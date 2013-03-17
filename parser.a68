@@ -165,8 +165,11 @@ BEGIN
 		obj := matched symbol; TRUE
 	    ELIF MATCH monop THEN
 		SYMBOL op := matched symbol;
-		REQUIRE obj;
-		obj := MONAD(op, HEAP EXPR:=obj); TRUE
+		IF match primary (obj) THEN
+		    obj := MONAD(op, HEAP EXPR:=obj); TRUE
+		ELSE
+		    FALSE
+		FI
 	    ELIF MATCH id THEN
 		IF MATCH "(" THEN
 		    obj := FUNCALL(id, parse arguments); TRUE
