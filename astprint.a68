@@ -62,9 +62,15 @@ OP P = (MONAD t)VOID:
     (P op OF t, parenthesize (lhs OF t,0));
 OP P = (DYAD t)VOID:
     (INT lvl = level of dyop(op OF t);
-     parenthesize (lhs OF t,lvl); 
-     (lvl>2|print(space);P op OF t; print(space)|P op OF t);
-     parenthesize (rhs OF t,lvl-1));
+     IF repr OF op OF t = ":" THEN
+	 parenthesize (lhs OF t,lvl-1); 
+	 (lvl>2|print(space);P op OF t; print(space)|P op OF t);
+	 parenthesize (rhs OF t,lvl)
+     ELSE
+	 parenthesize (lhs OF t,lvl); 
+	 (lvl>2|print(space);P op OF t; print(space)|P op OF t);
+	 parenthesize (rhs OF t,lvl-1)
+     FI);
 OP P = (FUNCALL t)VOID:
     (P id OF t; print("("); 
      FOR i TO UPB args OF t DO (i > 1|print(", ")|~); P (args OF t)[i] OD; 
