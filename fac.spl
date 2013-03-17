@@ -1,8 +1,3 @@
-Int blar()
-{
-    while(x) x=x+1;
-}
-
 /*
 Three ways to implement the factorial function in SPL.
 First the recursive version.
