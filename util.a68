@@ -62,7 +62,7 @@ OP DEBUG = (INT level, PROC VOID what)VOID: (level<debug level|what|~);
 
 PROC complain = (STRING why, []INT pos)VOID:
 BEGIN
-    putf (stand error, ($2(4z,": "),n(UPB why)a$,pos,why));
+    putf (stand error, ($2(6z,": "),n(UPB why)a$,pos,why));
     halt
 END;
 

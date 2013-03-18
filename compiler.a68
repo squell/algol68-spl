@@ -1,6 +1,10 @@
 PR include "parser.a68" PR
+PR heap=1024M PR
+PR handles=128M PR
+PR stack=8M PR
+PR frame=8M PR
 
 BEGIN
-    DECLS ast = parse file("stress.spl");
+    DECLS ast = parse file("large.spl"); 
     pretty print (ast)
 END
