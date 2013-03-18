@@ -352,8 +352,6 @@ BEGIN
 	WHILE DECL head; MATCH head DO
 	    REF LINK(next) := HEAP DECLS:=(head, ~);
 	    next := tail OF next
-	    ; DUMP head
-	    ; print(("COLLECTED:",collections,garbage,new line))
 	OD;
 	REF LINK(next) := NIL;
 	IF LINK(start) ISNT NIL THEN
