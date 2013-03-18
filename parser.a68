@@ -181,6 +181,7 @@ BEGIN
 	    FI
 	END;
 
+	# parse dyadic formulas using their precedence grouping #
 	PROC default = (REF EXPR e)EXPR: e;
 
 	PROC match priority = (REF EXPR obj, INT level, PROC(REF EXPR)EXPR left extend)BOOL:
