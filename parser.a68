@@ -293,12 +293,25 @@ BEGIN
 	FI
     END;
 
+    # iterative -- to avoid running out of stack #
     PROC parse statements = REF STMLIST:
     BEGIN
+	MODE LINK = REF STMLIST;
+	LINK start;
+	REF LINK next := start;
+	WHILE NOT MATCH "}" DO
+	    STM stm; REQUIRE stm;
+	    REF LINK(next) := HEAP STMLIST:=(stm, ~);
+	    next := tail OF next
+	OD;
+	REF LINK(next) := NIL;
+	start
+    COMMENT
 	IF MATCH "}" THEN NIL ELSE
 	    STM stm; REQUIRE stm;
 	    HEAP STMLIST:=(stm, parse statements)
 	FI
+    COMMENT
     END;
 
     OP MATCH = (REF DECL decl)BOOL:
@@ -331,8 +344,24 @@ BEGIN
 	    FALSE
 	FI;
 
+    # iterative version - otherwise we run out of stack...#
     OP MATCH = (REF DECLS prog)BOOL:
     BEGIN
+	MODE LINK = REF DECLS;
+	LINK start; REF LINK next := start;
+	WHILE DECL head; MATCH head DO
+	    REF LINK(next) := HEAP DECLS:=(head, ~);
+	    next := tail OF next
+	    ; DUMP head
+	    ; print(("COLLECTED:",collections,garbage,new line))
+	OD;
+	REF LINK(next) := NIL;
+	IF LINK(start) ISNT NIL THEN
+	    prog := start; TRUE
+	ELSE
+	    FALSE
+	FI
+    COMMENT 
 	DECL head;
 	IF MATCH head THEN
 	    prog := DECLS(head, (MATCH prog|HEAP DECLS:=prog|NIL));
@@ -340,6 +369,7 @@ BEGIN
 	ELSE
 	    FALSE
 	FI
+    COMMENT
     END;
 
     #-----------------------------------------#
