@@ -150,9 +150,13 @@ OP P = (DECLFUN x)VOID:
      FOR i TO UPB args OF x DO (i>1|print(", ")|~); P (args OF x)[i] OD;
      print((")", new line));
      P body OF x);
-OP P = (DECLS x)VOID:
+CO recursive version of the below CO
+OP Q = (DECLS x)VOID:
     (P (LOC DECL:=decl OF x); print(new line);
      IF tail OF x ISNT NIL THEN P tail OF x FI);
+OP P = (DECLS x)VOID:
+    (DECLS cur := x;
+     WHILE P decl OF cur; print(new line); REF DECLS(tail OF cur) ISNT NIL DO cur := tail OF cur OD);
 OP P = (REF DECL x)VOID:
     CASE x IN
       (DECLFUN f): P f,
