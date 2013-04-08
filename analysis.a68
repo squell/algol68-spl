@@ -7,8 +7,8 @@ COMMENT
 
   3 - don't use return type for derivation
   2 - disallow all ambiguous calls
-  1 - disallow cyclic types
-  0 - infinite and generic types
+  1 - disallow infinite and empty types
+  0 - allow improper types
 
   type chaining - use a more powerful type unification
   	* you should NOT need this with sanity = 3
@@ -17,7 +17,7 @@ COMMENT
    	* if FALSE, only Void functions can be statements
 COMMENT
 
-INT  type sanity = 3;
+INT  type sanity = 2;
 BOOL type voiding = TRUE;
 BOOL type chaining = FALSE;
 
@@ -27,6 +27,7 @@ BEGIN
     TYPE integral := SYMBOL("Int", ~);
     TYPE boolean  := SYMBOL("Bool", ~);
     TYPE placeholder := SYMBOL("*", ~);
+    HEAP TYPE dont care;
 
     # cleverly using the dictionary to reason about scope #
 
@@ -51,7 +52,7 @@ BEGIN
 	FI;
 
     PROC proper type = (IDENT id, TYPE t)VOID:
-	IF (t|(SYMBOL s): s = "Void"|FALSE) THEN
+	IF (t|(SYMBOL s): s = "Void"|FALSE) AND type sanity > 0 THEN
 	    complain("attempt to declare a Void variable", pos OF id)
 	FI;
 
@@ -171,7 +172,7 @@ BEGIN
 		      (value OF v|(EXPR e): e => return type,
 		                  (VOID)  : type identify(void, return type, pos OF v)),
 		  (FUNCALL e):
-		      check function call (e, (type voiding|LOC TYPE:=0|void)),
+		      check function call (e, (type voiding|dont care:=0|void)),
 		  (ASSIGN a):
 		      value OF a => get var type (id OF a),
 		  (REF STMLIST bloc):
@@ -208,22 +209,23 @@ BEGIN
 	DECLFUN decl = get fun signature (id OF call);
 	PARAMS sign = args OF decl;
 
-	IF UPB args OF call /= UPB sign THEN
-	    complain ("wrong number of arguments in call", pos OF id OF call)
-	ELSE
-	    FOR i TO UPB args OF call DO
-		(args OF call)[i] %> type OF sign[i]
-	    OD
-	FI;
+	PROC type check arguments = VOID:
+	    IF UPB args OF call /= UPB sign THEN
+		complain ("wrong number of arguments in call", pos OF id OF call)
+	    ELSE
+		FOR i TO UPB args OF call DO
+		    (args OF call)[i] %> type OF sign[i]
+		OD
+	    FI;
 
 	PROC all types instantiated = VOID:
 	    FOR i TO UPB unifiers OF decl DO
 		PARAM unifier = (unifiers OF decl)[i];
 		(type OF unifier | (UNIFIER i):
-		    complain("could not deduce concrete type for type variable "+name OF id OF unifier, pos OF id OF call))
+		    complain("could not deduce type for type variable "+name OF id OF unifier+" of `"+name OF id OF call+"'", pos OF id OF call))
 	    OD;
 
-	PROC detect cyclic types = VOID:
+	PROC detect improper types = VOID:
 	    FOR i TO UPB unifiers OF decl DO 
 		PARAM unifier = (unifiers OF decl)[i];
 
@@ -235,6 +237,7 @@ BEGIN
 			complain ("attempt to instantiate cyclic type "+name OF id OF unifier+" = "+REPR inf,  pos OF id OF call)
 		    FI OD;
 		    CASE types[1] IN
+			(SYMBOL s): IF s="Void" THEN complain ("attempt to instantiate "+name OF id OF unifier+" = Void", pos OF id OF call) FI,
 			(LISTT t): cycle check((seen[1]:=lt OF t; seen)),
 			(PAIRT t): (cycle check((seen[1]:=lt OF t; seen));
 				    cycle check((seen[1]:=rt OF t; seen)))
@@ -244,18 +247,22 @@ BEGIN
 	    OD;
 
 	CASE type sanity IN
-	    (type identify(type OF sign[0], target, pos OF id OF call);
-	     detect cyclic types),
+	    (type check arguments;
+	     type identify(type OF sign[0], target, pos OF id OF call);
+	     detect improper types),
 
 	    (type identify(type OF sign[0], target, pos OF id OF call);
+	     type check arguments;
 	     all types instantiated;
-	     detect cyclic types),
+	     detect improper types),
 
-	    (all types instantiated;
-	     detect cyclic types;
-	     type identify(type OF sign[0], target, pos OF id OF call))
+	    (type check arguments;
+	     all types instantiated;
+	     type identify(type OF sign[0], target, pos OF id OF call);
+	     detect improper types)
 	OUT
-	     type identify(type OF sign[0], target, pos OF id OF call)
+	     type identify(type OF sign[0], target, pos OF id OF call);
+	     type check arguments
 	ESAC;
 
 	IF NOT type chaining THEN FOR i TO UPB unifiers OF decl DO
@@ -354,14 +361,15 @@ BEGIN
     IF a IS b THEN TRUE ELSE
     CASE b IN
         (UNIFIER i): (6DEBUG (VOID: print((REPR b,":=",REPR a,new line)));
-	    CASE a IN (UNIFIER j):
-		IF type chaining THEN
-		    a := TYPELNK(b,~); TRUE
-		ELSE FALSE FI
+	    CASE a IN
+		(UNIFIER j):
+		    IF type chaining THEN
+			a := TYPELNK(b,~); TRUE
+		    ELSE FALSE FI
 	    OUT b := a; TRUE
 	    ESAC)
 	COMMENT
-	    we shouldn't unify unifiers; normal circumstances the linking
+	    we shouldn't unify unifiers; in normal circumstances the linking
 	    behaviour is not necessary since arguments should be fully
 	    instantiated.
 	COMMENT
@@ -373,11 +381,10 @@ BEGIN
 	(IDENT  ia): (b|(IDENT ib):name OF ia = name OF ib|FALSE),
 	(TYPELNK k): alias OF k = b,
 	(UNIFIER i): (6DEBUG (VOID: print((REPR b,"=:",REPR a,new line)));
-	    IF (b|(SYMBOL s):s="Void"|FALSE) THEN FALSE ELSE a := b; TRUE FI)
+	    a := b; TRUE)
 	COMMENT
-	    sanity = 2: this case should only validly apply in case of []; 
+	    sanity = 3: this case should only validly apply in case of []; 
 	    any other use of a generic return type is forbidden elsewhere
-	    sanity < 2: disallow instantiating void
 	COMMENT 
     OUT complain("fatal: types types types!?", (0,0)); FALSE
     ESAC FI;
