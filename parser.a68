@@ -18,7 +18,7 @@ BEGIN
     [2]INT pos;
 
     PROC parse error = (STRING why)BOOL:
-	(complain(why,pos); SKIP);
+	(complain(why,pos); halt);
 
     CHAR cur char := " ";
 
@@ -318,7 +318,7 @@ BEGIN
 	IF TYPE ret type; MATCH ret type THEN
 	    IDENT id; REQUIRE id;
 	    IF MATCH "=" THEN
-		EXPR expr; REQUIRE "True"; REQUIRE ";";
+		EXPR expr; REQUIRE expr; REQUIRE ";";
 		decl := DECLSTM(ret type, id, expr)
 	    ELSE
 		PARAMS formal args;

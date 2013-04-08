@@ -17,9 +17,9 @@ COMMENT
    	* if FALSE, only Void functions can be statements
 COMMENT
 
-INT  type sanity = 2;
-BOOL type voiding = FALSE;
-BOOL type chaining = TRUE;
+INT  type sanity = 3;
+BOOL type voiding = TRUE;
+BOOL type chaining = FALSE;
 
 PROC semantic analysis = (REF DECLS ast)VOID:
 BEGIN
@@ -181,7 +181,7 @@ BEGIN
 		        REF STMLIST then = sub statement(then OF if);
 		        REF STMLIST else = sub statement(else OF if);
 			then OF if := then;
-			else OF if := else;
+			IF else OF if ISNT NIL THEN else OF if := else FI;
 			new scope(VOID: for each stm(then, process stm));
 			new scope(VOID: for each stm(else, process stm)) ),
 		  (WHILESTM wh):
@@ -385,11 +385,14 @@ BEGIN
 ~
 END;
 
+#
 PR include "parser.a68" PR
 PR include "astprint.a68" PR
 
-(DECLS prog := parse file("test2.spl");
+(DECLS prog := parse file("test3.spl");
  semantic analysis(prog);
+ DUMP prog;
  ~
  )
+#
 

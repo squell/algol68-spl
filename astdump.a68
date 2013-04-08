@@ -4,7 +4,14 @@ OP DUMP = (INT i)VOID: print(whole(i,0));
 OP DUMP = (STRING sym)VOID: print((sym,space));
 OP DUMP = (SYMBOL sym)VOID: DUMP(repr OF sym);
 OP DUMP = (CONST i)VOID: print((whole(int OF i,0),space));
-OP DUMP = (IDENT id)VOID: DUMP(name OF id);
+OP DUMP = (IDENT id)VOID: (DUMP(name OF id); DUMP(info OF id));
+OP DUMP = (REF DECLINFO info)VOID:
+    IF info ISNT NIL THEN
+	CASE decl OF info IN
+	    (DECL d): (print("decl:"); DUMP (LOC DECL:=d)),
+	    (PARAM p): (print("parm"); DUMP pos OF info; print(":"); DUMP type OF p)
+	ESAC
+    FI;
 OP DUMP = (MONAD t)VOID:
     (DUMP op OF t, DUMP lhs OF t);
 OP DUMP = (DYAD t)VOID:
@@ -25,7 +32,7 @@ OP DUMP = (REF EXPR t)VOID:
     ESAC; print(")"));
 
 OP DUMP = (DECLSTM x)VOID:
-    (DUMP (LOC TYPE:=type OF x), DUMP id OF x, DUMP (LOC EXPR:=value OF x));
+    (DUMP (LOC TYPE:=type OF x), print(name OF id OF x), DUMP (LOC EXPR:=value OF x));
 OP DUMP = (IFSTM x)VOID:
     (DUMP (LOC EXPR:=cond OF x), DUMP then OF x, (else OF x IS NIL|~|DUMP else OF x));
 OP DUMP = (WHILESTM x)VOID:
@@ -46,9 +53,9 @@ OP DUMP = (REF STM x)VOID:
     ESAC; print ("]"));
 
 OP DUMP = (PARAM x)VOID:
-    (print("<"); DUMP (LOC TYPE:=type OF x); DUMP id OF x; print(">"));
+    (print("<"); DUMP (LOC TYPE:=type OF x); print(name OF id OF x); print(">"));
 OP DUMP = (DECLFUN x)VOID:
-    (DUMP (LOC TYPE:=ret type (x)); DUMP function id(x);
+    (DUMP (LOC TYPE:=ret type (x)); print(name OF function id(x));
      FOR i TO UPB args OF x DO DUMP (args OF x)[i] OD;
      DUMP body OF x);
 OP DUMP = (DECLS x)VOID:
@@ -61,7 +68,7 @@ OP DUMP = (REF DECL x)VOID:
 
 OP DUMP = (REF TYPE t)VOID:
     CASE t IN
-      (UNIFIER i): (print("*"); DUMP i),
+      (UNIFIER i): (print("*"); DUMP i; print(" ")),
       (TYPELNK l): DUMP alias OF l,
       (SYMBOL s): DUMP s,
       (IDENT i) : (print("'"); DUMP i),

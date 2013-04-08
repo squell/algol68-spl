@@ -1,10 +1,12 @@
 PR include "parser.a68" PR
+PR include "analysis.a68" PR
 PR heap=1024M PR
 PR handles=128M PR
 PR stack=8M PR
 PR frame=8M PR
 
 BEGIN
-    DECLS ast = parse file("large.spl"); 
-    pretty print (ast)
+    DECLS ast := parse file(argv(4)); 
+    semantic analysis (ast);
+    DUMP ast
 END
