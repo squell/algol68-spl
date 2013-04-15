@@ -333,7 +333,7 @@ BEGIN
 		type identify (boolean, type, pos OF op OF d);
 		lhs OF d %> boolean;
 		rhs OF d %> boolean
-	    ELIF char in string ((repr OF op OF d)[1], NIL, "=<>") THEN
+	    ELIF char in string ((repr OF op OF d)[1], NIL, "!=<>") THEN
 		type identify (boolean, type, pos OF op OF d);
 		lhs OF d %> integral;
 		rhs OF d %> integral
