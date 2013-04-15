@@ -173,9 +173,9 @@ BEGIN
 		                  (VOID)  : type identify(void, return type, pos OF v)),
 		  (FUNCALL e):
 		      IF NOT type voiding THEN
-			  check function call (e, void)
+			  e => void
 		      ELSE
-			  check function call (e, dont care:=-1);
+			  e %> (dont care:=-1);
 			  IF type sanity > 1 THEN
 			      (dont care|(UNIFIER i): complain("result needed for type deduction", pos OF id OF e) | ~)
 			  FI;
