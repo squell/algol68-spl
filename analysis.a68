@@ -17,9 +17,9 @@ COMMENT
    	* if FALSE, only Void functions can be statements
 COMMENT
 
-INT  type sanity = 2;
-BOOL type voiding = TRUE;
-BOOL type chaining = FALSE;
+INT  type sanity = 3;
+BOOL type voiding = FALSE;
+BOOL type chaining = TRUE;
 
 PROC semantic analysis = (REF DECLS ast)VOID:
 BEGIN
@@ -172,7 +172,15 @@ BEGIN
 		      (value OF v|(EXPR e): e => return type,
 		                  (VOID)  : type identify(void, return type, pos OF v)),
 		  (FUNCALL e):
-		      check function call (e, (type voiding|dont care:=0|void)),
+		      IF NOT type voiding THEN
+			  check function call (e, void)
+		      ELSE
+			  check function call (e, dont care:=-1);
+			  IF type sanity > 1 THEN
+			      (dont care|(UNIFIER i): complain("result needed for type deduction", pos OF id OF e) | ~)
+			  FI;
+			  reset unifiers (e)
+		      FI,
 		  (ASSIGN a):
 		      value OF a => get var type (id OF a),
 		  (REF STMLIST bloc):
