@@ -43,7 +43,8 @@ MODE TUPLE   = STRUCT(REF EXPR lhs, rhs, [2]INT pos);
 MODE FUNCALL = STRUCT(IDENT id, REF[]EXPR args);
 MODE EXPR    = UNION(SYMBOL,CONST,MONAD,DYAD,TUPLE,IDENT,FUNCALL);
 
-MODE DECLSTM = STRUCT(TYPE type, IDENT id, EXPR value);
+# auto-extensions; prev: TYPE type #
+MODE DECLSTM = STRUCT(REF TYPE type, IDENT id, EXPR value);
 MODE IFSTM   = STRUCT(EXPR cond, REF STM then, else);
 MODE WHILESTM= STRUCT(EXPR cond, REF STM body);
 MODE ASSIGN  = STRUCT(IDENT id, EXPR value);
@@ -71,8 +72,9 @@ MODE DECLINFO= STRUCT(UNION(DECL,PARAM) decl, INT pos);
 MODE UNIFIER = INT; # only used as a placeholder type #
 MODE TYPELNK = STRUCT(REF TYPE alias,BOOL dummy);
 
+# auto-extension #
 []STRING reserved words = 
-    ("Void", "Int", "Bool", "True", "False","if","while","else","return");
+    ("Void", "Int", "Bool", "Auto", "True", "False","if","while","else","return");
 
 PROC function id = (DECLFUN decl)IDENT: id OF (args OF decl)[0];
 PROC ret type = (DECLFUN decl)TYPE: type OF (args OF decl)[0];

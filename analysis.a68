@@ -192,7 +192,12 @@ BEGIN
 			body OF wh := body;
 			new scope(VOID: for each stm(body, process stm)) ),
 		  (DECLSTM decl):
-		      ( value OF decl => type OF decl;
+		      # auto-extenion; prev: => instead of %> #
+		      ( value OF decl %> type OF decl;
+		      # auto-extenion; check if unified #
+		        IF (type OF decl|(UNIFIER i): TRUE|FALSE) THEN
+			    complain("could not deduce type of variable "+name OF id OF decl, pos OF id OF decl)
+			FI;
 			make symbol (id OF decl, decl, new offset) )
 		  OUT
 		      complain("fatal: compiler is incomplete!", (0,0))

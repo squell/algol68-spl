@@ -285,11 +285,14 @@ BEGIN
 		stm := FUNCALL(id, parse arguments)
 	    ELSE
 		IDENT name; REQUIRE name; REQUIRE "="; REQUIRE expr;
-		stm := DECLSTM(id,name,expr) 
+		# auto-extension; prev: no HEAP TYPE:= #
+		stm := DECLSTM(HEAP TYPE:=id,name,expr) 
 	    FI; REQUIRE ";"; TRUE
-	ELIF MATCH type THEN 
+	# auto-extension; prev: ELIF MATCH type THEN #
+	ELIF type:=0; MATCH type OREL MATCH "Auto" THEN 
 	    IDENT name; REQUIRE name; REQUIRE "="; REQUIRE expr;
-	    stm := DECLSTM(type,name,expr); 
+	    # auto-extension; prev: no HEAP TYPE:= #
+	    stm := DECLSTM(HEAP TYPE:=type,name,expr); 
 	    REQUIRE ";"; TRUE
 	ELSE
 	    FALSE
