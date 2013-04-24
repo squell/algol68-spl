@@ -51,11 +51,6 @@ BEGIN
 	    complain("unknown identifier: `"+name OF id+"'", pos OF id); ~
 	FI;
 
-    PROC proper type = (IDENT id, TYPE t)VOID:
-	IF (t|(SYMBOL s): s = "Void"|FALSE) AND type sanity > 0 THEN
-	    complain("attempt to declare a Void variable", pos OF id)
-	FI;
-
     PROC get var type = (IDENT id)TYPE:
     BEGIN
 	DECLINFO var = get symbol (id);
@@ -145,7 +140,6 @@ BEGIN
 	CASE this IN
 	(DECLSTM decl):
 	    ( cur scope := global scope;
-	      proper type (id OF decl, type OF decl);
 	      value OF decl => type OF decl;
 	      make symbol (id OF decl, this, 0) ),
 	(DECLFUN function):
@@ -159,7 +153,6 @@ BEGIN
 	      TYPE return type := ret type(function);
 	      FOR i TO UPB args OF function DO
 		  PARAM parm = (args OF function)[i];
-		  proper type (id OF parm, type OF parm);
 		  make symbol (id OF parm, parm, i)
 	      OD;
 
@@ -199,8 +192,7 @@ BEGIN
 			body OF wh := body;
 			new scope(VOID: for each stm(body, process stm)) ),
 		  (DECLSTM decl):
-		      ( proper type (id OF decl, type OF decl);
-		        value OF decl => type OF decl;
+		      ( value OF decl => type OF decl;
 			make symbol (id OF decl, decl, new offset) )
 		  OUT
 		      complain("fatal: compiler is incomplete!", (0,0))

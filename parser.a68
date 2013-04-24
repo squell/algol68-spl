@@ -17,8 +17,10 @@ BEGIN
     INT col := 0;
     [2]INT pos;
 
+    PROC end the misery = BOOL: halt;
+
     PROC parse error = (STRING why)BOOL:
-	(complain(why,pos); halt);
+	(complain(why,pos); end the misery);
 
     CHAR cur char := " ";
 
@@ -181,6 +183,9 @@ BEGIN
 	    FI
 	END;
 
+	PROC missing expression = BOOL:
+	    (parse error ("illegal operator"));
+
 	# parse dyadic formulas using their precedence grouping #
 	PROC default = (REF EXPR e)EXPR: e;
 
@@ -224,11 +229,9 @@ BEGIN
 	recurse(1); TRUE
     END;
 
-    # treat Void as a type for parsing purposes; this allows us to
-      give better error messages later on #
     OP MATCH = (REF TYPE spec)BOOL:
     BEGIN
-	[]STRING prim types = ("Int", "Bool", "Void");
+	[]STRING prim types = ("Int", "Bool");
 	IDENT id;
 	IF MATCH id THEN 
 	    spec := id; TRUE
@@ -282,9 +285,9 @@ BEGIN
 		stm := FUNCALL(id, parse arguments)
 	    ELSE
 		IDENT name; REQUIRE name; REQUIRE "="; REQUIRE expr;
-		stm := DECLSTM(id,name,expr)
+		stm := DECLSTM(id,name,expr) 
 	    FI; REQUIRE ";"; TRUE
-	ELIF MATCH type THEN
+	ELIF MATCH type THEN 
 	    IDENT name; REQUIRE name; REQUIRE "="; REQUIRE expr;
 	    stm := DECLSTM(type,name,expr); 
 	    REQUIRE ";"; TRUE
@@ -315,9 +318,12 @@ BEGIN
     END;
 
     OP MATCH = (REF DECL decl)BOOL:
-	IF TYPE ret type; MATCH ret type THEN
+	IF TYPE ret type := SYMBOL("Void", pos); MATCH ret type OR MATCH "Void" THEN
 	    IDENT id; REQUIRE id;
 	    IF MATCH "=" THEN
+		IF (ret type|(SYMBOL s): s="Void"|FALSE) THEN
+		    complain ("argument list expected", pos OF matched symbol); end the misery
+		FI;
 		EXPR expr; REQUIRE expr; REQUIRE ";";
 		decl := DECLSTM(ret type, id, expr)
 	    ELSE
@@ -401,8 +407,6 @@ BEGIN
 	(MATCH expr | TRUE | parse error ("illegal expression"));
     OP REQUIRE = (REF IDENT id)VOID:
 	(MATCH id | TRUE | parse error ("identifier expected"));
-    PROC missing expression = BOOL:
-	(parse error ("illegal operator"); halt);
 
     program
 END;
