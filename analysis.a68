@@ -48,7 +48,9 @@ BEGIN
 	IF DECLINFO found; retrieve (symbols, name OF id, found) THEN 
 	    found 
 	ELSE
-	    complain("unknown identifier: `"+name OF id+"'", pos OF id); ~
+	    complain("unknown identifier: `"+name OF id+"'", pos OF id); 
+	    DECLSTM stm = (HEAP TYPE:=0, id, ~);
+	    DECLINFO(stm, ~)
 	FI;
 
     PROC get var type = (IDENT id)TYPE:
@@ -59,13 +61,15 @@ BEGIN
 	    (DECLSTM decl): type OF decl,
 	    (PARAM arg):    type OF arg
 	OUT
-	    complain("function `"+name OF id+"' used where a variable expected", pos OF id); ~
+	    complain("function `"+name OF id+"' used where a variable expected", pos OF id); 
+	    UNIFIER(0)
 	ESAC
     END;
 
     PROC get fun signature = (IDENT id)DECLFUN:
 	(decl OF get symbol(id) | (DECLFUN fun): fun | 
-	   complain("`"+name OF id+"' is not a function", pos OF id); ~ );
+	   complain("`"+name OF id+"' is not a function", pos OF id); 
+	   DECLFUN(HEAP[0]PARAM, ~, ~, HEAP FLEX[0]PARAM));
 
     INT frame size;
     INT frame offset;
@@ -90,7 +94,8 @@ BEGIN
 	    NIL
 	ELSE CASE s IN 
 	(DECLSTM d): 
-	    (complain("declaration not allowed here", pos OF id OF d);~),
+	    (complain("declaration not allowed here", pos OF id OF d);
+	     HEAP STMLIST:=(s, NIL)),
 	(REF STMLIST bloc):
 	    bloc
 	OUT 
@@ -110,7 +115,7 @@ BEGIN
 		(PAIRT t): HEAP TYPE:=PAIRT(edit type (lt OF t), edit type (rt OF t)),
 		(IDENT id): 
 		    IF DECLINFO found; retrieve (types, name OF id, found) THEN
-			(decl OF found| (PARAM v): type OF v | complain("fatal: cosmic rays!?",(0,0));~)
+			(decl OF found| (PARAM v): type OF v | fatal error ("cosmic rays!?"); ~)
 		    ELSE
 			PARAM var := PARAM(HEAP TYPE:=ucount+:=1, id);
 			assert (types, name OF id, DECLINFO(var, count+:=1));
@@ -170,7 +175,7 @@ BEGIN
 		      ELSE
 			  e %> (dont care:=-1);
 			  IF type sanity > 1 THEN
-			      (dont care|(UNIFIER i): complain("result needed for type deduction", pos OF id OF e) | ~)
+			      (dont care|(UNIFIER i): complain("result needed for type deduction", pos OF id OF e) | SKIP)
 			  FI;
 			  reset unifiers (e)
 		      FI,
@@ -200,7 +205,7 @@ BEGIN
 			FI;
 			make symbol (id OF decl, decl, new offset) )
 		  OUT
-		      complain("fatal: compiler is incomplete!", (0,0))
+		      fatal error ("compiler is incomplete!")
 		  ESAC;
 
 	      frame size OF function := frame size;
@@ -306,7 +311,7 @@ BEGIN
 		TYPE any list := LISTT(HEAP TYPE:=42,0);
 		type identify (any list, type, pos OF s)
 	    ELSE
-		complain ("fatal: illegal symbol?!", (0,0))
+		fatal error ("illegal symbol?!")
 	    FI,
 	(CONST i):
 	    type identify (integral, type, pos OF i),
@@ -323,7 +328,8 @@ BEGIN
 	    ELIF op OF m = "!" THEN 
 		type identify (boolean, type, pos OF op OF m);
 		lhs OF m %> boolean
-	    ELSE complain("fatal: illegal operator?!", (0,0))
+	    ELSE 
+		fatal error ("illegal operator?!")
 	    FI,
 	(DYAD d):
 	    IF char in string ((repr OF op OF d)[1], NIL, "&|") THEN
@@ -391,7 +397,7 @@ BEGIN
 	    sanity = 3: this case should only validly apply in case of []; 
 	    any other use of a generic return type is forbidden elsewhere
 	COMMENT 
-    OUT complain("fatal: types types types!?", (0,0)); FALSE
+    OUT fatal error ("types types types!?"); ~
     ESAC FI;
 
 ~
