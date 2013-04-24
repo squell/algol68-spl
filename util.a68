@@ -60,9 +60,15 @@ INT debug level = 6;
 PRIO DEBUG = 9;
 OP DEBUG = (INT level, PROC VOID what)VOID: (level<debug level|what|~);
 
+INT complaints := 0;
+
 PROC complain = (STRING why, []INT pos)VOID:
-BEGIN
-    putf (stand error, ($2(6z,": "),n(UPB why)a$,pos,why));
-    halt
-END;
+    ( complaints +:= 1;
+      putf (stand error, ($2(6z,": "),n(UPB why)a,l$,pos,why)) );
+
+PROC no complaints = (STRING when)VOID:
+    IF complaints > 0 THEN fatal error ("errors encounted during "+when) FI;
+
+PROC fatal error = (STRING why)VOID:
+    ( print ("fatal: "+why); halt );
 

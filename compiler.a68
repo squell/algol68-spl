@@ -7,6 +7,10 @@ PR frame=8M PR
 
 BEGIN
     DECLS ast := parse file(argv(4)); 
+    no complaints ("parsing");
+
     semantic analysis (ast);
+    no complaints ("type checking");
+
     DUMP ast
 END

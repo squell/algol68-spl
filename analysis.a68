@@ -17,7 +17,7 @@ COMMENT
    	* if FALSE, only Void functions can be statements
 COMMENT
 
-INT  type sanity = 3;
+INT  type sanity = 2;
 BOOL type voiding = FALSE;
 BOOL type chaining = TRUE;
 
@@ -49,11 +49,11 @@ BEGIN
 	    found 
 	ELSE
 	    complain("unknown identifier: `"+name OF id+"'", pos OF id); 
-	    DECLSTM stm = (HEAP TYPE:=0, id, ~);
+	    DECLSTM stm = (HEAP TYPE:=0, id, SYMBOL("?",~));
 	    DECLINFO(stm, ~)
 	FI;
 
-    PROC get var type = (IDENT id)TYPE:
+    PROC get var type = (IDENT id)REF TYPE:
     BEGIN
 	DECLINFO var = get symbol (id);
 	info OF id := var;
@@ -62,14 +62,24 @@ BEGIN
 	    (PARAM arg):    type OF arg
 	OUT
 	    complain("function `"+name OF id+"' used where a variable expected", pos OF id); 
-	    UNIFIER(0)
+	    HEAP TYPE:=0
 	ESAC
     END;
 
-    PROC get fun signature = (IDENT id)DECLFUN:
-	(decl OF get symbol(id) | (DECLFUN fun): fun | 
-	   complain("`"+name OF id+"' is not a function", pos OF id); 
-	   DECLFUN(HEAP[0]PARAM, ~, ~, HEAP FLEX[0]PARAM));
+    PROC get fun signature = (FUNCALL call)DECLFUN:
+	(decl OF get symbol(id OF call) | (DECLFUN fun): fun | 
+	   complain("`"+name OF id OF call+"' is not a function", pos OF id OF call);
+	   HEAP [0:UPB args OF call]PARAM fake param;
+	   FOR i FROM 0 TO UPB args OF call DO fake param[i] := PARAM(HEAP TYPE:=0, id OF call) OD;
+	   DECLFUN(fake param, NIL, NIL, HEAP FLEX[0]PARAM));
+
+    # this function only exists to provide a 'silent' alternative to the above #
+    PROC get unifiers = (FUNCALL call)REF[]PARAM:
+	IF DECLINFO found; retrieve (symbols, name OF id OF call, found) THEN
+	    (decl OF found | (DECLFUN fun): unifiers OF fun | HEAP[0]PARAM)
+	ELSE
+	    HEAP[0]PARAM
+	FI;
 
     INT frame size;
     INT frame offset;
@@ -173,11 +183,10 @@ BEGIN
 		      IF NOT type voiding THEN
 			  e => void
 		      ELSE
-			  e %> (dont care:=-1);
+			  e => (dont care:=-1);
 			  IF type sanity > 1 THEN
 			      (dont care|(UNIFIER i): complain("result needed for type deduction", pos OF id OF e) | SKIP)
-			  FI;
-			  reset unifiers (e)
+			  FI
 		      FI,
 		  (ASSIGN a):
 		      value OF a => get var type (id OF a),
@@ -197,9 +206,8 @@ BEGIN
 			body OF wh := body;
 			new scope(VOID: for each stm(body, process stm)) ),
 		  (DECLSTM decl):
-		      # auto-extenion; prev: => instead of %> #
-		      ( value OF decl %> type OF decl;
-		      # auto-extenion; check if unified #
+		      ( value OF decl => type OF decl;
+		      # auto-extenion; reset, and check if unified #
 		        IF (type OF decl|(UNIFIER i): TRUE|FALSE) THEN
 			    complain("could not deduce type of variable "+name OF id OF decl, pos OF id OF decl)
 			FI;
@@ -216,7 +224,7 @@ BEGIN
 
     PROC check function call = (FUNCALL call, REF TYPE target)VOID:
     BEGIN
-	DECLFUN decl = get fun signature (id OF call);
+	DECLFUN decl = get fun signature (call);
 	PARAMS sign = args OF decl;
 
 	PROC type check arguments = VOID:
@@ -287,16 +295,17 @@ BEGIN
 	(DYAD d):    (reset unifiers (lhs OF d); reset unifiers (rhs OF d)),
 	(TUPLE d):   (reset unifiers (lhs OF d); reset unifiers (rhs OF d)),
 	(FUNCALL f): (FOR i TO UPB args OF f DO reset unifiers ((args OF f)[i]) OD;
-	              DECLFUN decl = get fun signature (id OF f);
-	              FOR i TO UPB unifiers OF decl DO REF TYPE(type OF (unifiers OF decl)[i]) := i OD)
+	              []PARAM unifiers = get unifiers (f);
+	              FOR i TO UPB unifiers DO REF TYPE(type OF (unifiers)[i]) := i OD)
     ESAC;
 
     PRIO => = 5;
-    OP => = (EXPR expr, TYPE type)VOID: 
+    OP => = (EXPR expr, REF TYPE type)VOID: 
 	IF NOT type chaining THEN
-	    expr %> (LOC TYPE:=type)
+	    #expr %> (LOC TYPE:=type)#
+	    expr %> type
 	ELSE
-	    expr %> (LOC TYPE:=type);
+	    expr %> type;
 	    reset unifiers (expr)
 	FI;
 
