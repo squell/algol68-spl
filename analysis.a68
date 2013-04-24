@@ -99,17 +99,17 @@ BEGIN
 
     # normalize the sub statements of if/then/else and while statements #
 
-    PROC sub statement = (REF STM s)REF STMLIST:
-	IF s IS NIL THEN
+    PROC sub statement = (REF STM stm)REF STMLIST:
+	IF stm IS NIL THEN
 	    NIL
-	ELSE CASE s IN 
+	ELSE CASE stm IN 
 	(DECLSTM d): 
 	    (complain("declaration not allowed here", pos OF id OF d);
-	     HEAP STMLIST:=(s, NIL)),
+	     HEAP STMLIST:=(stm, NIL)),
 	(REF STMLIST bloc):
 	    bloc
 	OUT 
-	    HEAP STMLIST:=(s, NIL)
+	    HEAP STMLIST:=(stm, NIL)
 	ESAC FI;
 
     # replace type variables with shared structures; do this just once #
