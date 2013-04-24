@@ -1,0 +1,147 @@
+/* herd u like ll* parsers */
+Void main() {
+Bool b0=True;
+Bool b1=True;
+Bool b2=True;
+Bool b3=True;
+Bool b4=True;
+Bool b5=True;
+Bool b6=True;
+Bool b7=True;
+Bool b8=True;
+Bool b9=True;
+Bool b10=True;
+Bool b11=True;
+Bool b12=True;
+Bool b13=True;
+Bool b14=True;
+Bool b15=True;
+Bool b16=True;
+Bool b17=True;
+Bool b18=True;
+Bool b19=True;
+Bool b20=True;
+Bool b21=True;
+Bool b22=True;
+Bool b23=True;
+Bool b24=True;
+Bool b25=True;
+Bool b26=True;
+Bool b27=True;
+Bool b28=True;
+Bool b29=True;
+Bool b30=True;
+Bool b31=True;
+Bool b32=True;
+Bool b33=True;
+Bool b34=True;
+Bool b35=True;
+Bool b36=True;
+Bool b37=True;
+Bool b38=True;
+Bool b39=True;
+Bool b40=True;
+Bool b41=True;
+Bool b42=True;
+Bool b43=True;
+Bool b44=True;
+Bool b45=True;
+Bool b46=True;
+Bool b47=True;
+Bool b48=True;
+Bool b49=True;
+Bool b50=True;
+Bool b51=True;
+Bool b52=True;
+Bool b53=True;
+Bool b54=True;
+Bool b55=True;
+Bool b56=True;
+Bool b57=True;
+Bool b58=True;
+Bool b59=True;
+Bool b60=True;
+Bool b61=True;
+Bool b62=True;
+Bool b63=True;
+
+if(b0)
+if(b1)
+if(b2)
+if(b3)
+if(b4)
+if(b5)
+if(b6)
+if(b7)
+if(b8)
+if(b9)
+if(b10)
+if(b11)
+if(b12)
+if(b13)
+if(b14)
+if(b15)
+if(b16)
+if(b17)
+if(b18)
+if(b19)
+if(b20)
+if(b21)
+if(b22)
+if(b23)
+if(b24)
+if(b25)
+if(b26)
+if(b27)
+if(b28)
+if(b29)
+if(b30)
+if(b31)
+if(b32)
+if(b33)
+if(b34)
+if(b35)
+if(b36)
+if(b37)
+if(b38)
+if(b39)
+if(b40)
+if(b41)
+if(b42)
+if(b43)
+if(b44)
+if(b45)
+if(b46)
+if(b47)
+if(b48)
+if(b49)
+if(b50)
+if(b51)
+if(b52)
+if(b53)
+if(b54)
+if(b55)
+if(b56)
+if(b57)
+if(b58)
+if(b59)
+if(b60)
+if(b61)
+if(b62)
+if(b63)
+  print(5);
+else
+  print(5);
+else
+  print(5);
+else
+  print(5);
+else
+  print(5);
+else
+  print(5);
+else
+  print(5);
+else
+  print(5);
+}
