@@ -1,0 +1,96 @@
+/* Typing stress test 
+  -- a.k.a.  playing around with cyclic and inconsistent types.
+
+  all the small building blocks are given conservative implementations which 
+  should definately pass any compiler.
+ */
+
+// diagonalisation
+(u,u) d(u x) 
+    { return (x,x); }
+
+([u],u) d1(u x)
+    { return ([],x); }
+
+// conjuration
+u e0()
+    { [u] ety = []; return hd(ety); }
+
+(u,u) e() 
+    { [u] ety = []; u x = hd(ety); return (x,x); }
+
+([u],u) e2()
+    { [u] ety = []; u x = hd(ety); return ([], x); }
+
+// recursion
+u f((u,[u]) x)
+    { return fst(x); }
+
+u f1((u,(u,u)) x)
+    { return fst(x); }
+
+u f2((u,[(u,u)]) x)
+    { return fst (x); }
+u f3((u,[(Int,u)]) x)
+    { return fst (x); }
+u f4(([u],[(u,u)]) x)
+    { return hd(fst(x)); }
+
+// abjuration
+u g(([u],(u,u)) x)
+    { return hd(fst(x)); }
+
+// enchanting
+u h1((u,Int) x)
+    { return fst(x); }
+
+u h2((u,v) x)
+    { return fst(x); }
+
+// misdirection
+[u] l(u x) 
+    { return x:[]; }
+
+[u] n()
+    { return []; }
+
+Void accept(u x) 
+    { u y = x; }
+
+Void main()
+{
+    //(Int,Int) i = h1(d(hd(l(f1(g(fst((e0(),[]))))))));
+}
+
+
+/* my pretty printer doesnt show type info, instead I use a raw dump which provides more info about the AST; a dump of this file looks like this:
+
+<fun (,)*1 *1 d<*1 x>[return (tuple (ident x parm1:'u )(ident x parm1:'u ))]>
+<fun (,)[]*2 *2 d1<*2 x>[return (tuple (symbol [] )(ident x parm1:'u ))]>
+<fun *3 e0[decl []'u ety(symbol [] )][return (funcall hd (ident ety decl:<stm []'u ety(symbol [] )>
+))]>
+<fun (,)*4 *4 e[decl []'u ety(symbol [] )][decl 'u x(funcall hd (ident ety decl:<stm []'u ety(symbol [] )>
+))][return (tuple (ident x decl:<stm 'u x(funcall hd (ident ety decl:<stm []'u ety(symbol [] )>
+))>
+)(ident x decl:<stm 'u x(funcall hd (ident ety decl:<stm []'u ety(symbol [] )>
+))>
+))]>
+<fun (,)[]*5 *5 e2[decl []'u ety(symbol [] )][decl 'u x(funcall hd (ident ety decl:<stm []'u ety(symbol [] )>
+))][return (tuple (symbol [] )(ident x decl:<stm 'u x(funcall hd (ident ety decl:<stm []'u ety(symbol [] )>
+))>
+))]>
+<fun *6 f<(,)*6 []*6 x>[return (funcall fst (ident x parm1:(,)'u []'u ))]>
+<fun *7 f1<(,)*7 (,)*7 *7 x>[return (funcall fst (ident x parm1:(,)'u (,)'u 'u ))]>
+<fun *8 f2<(,)*8 [](,)*8 *8 x>[return (funcall fst (ident x parm1:(,)'u [](,)'u 'u ))]>
+<fun *9 f3<(,)*9 [](,)Int *9 x>[return (funcall fst (ident x parm1:(,)'u [](,)Int 'u ))]>
+<fun *10 f4<(,)[]*10 [](,)*10 *10 x>[return (funcall hd (funcall fst (ident x parm1:(,)[]'u [](,)'u 'u )))]>
+<fun *11 g<(,)[]*11 (,)*11 *11 x>[return (funcall hd (funcall fst (ident x parm1:(,)[]'u (,)'u 'u )))]>
+<fun *12 h1<(,)*12 Int x>[return (funcall fst (ident x parm1:(,)'u Int ))]>
+<fun *13 h2<(,)*13 *14 x>[return (funcall fst (ident x parm1:(,)'u 'v ))]>
+<fun []*15 l<*15 x>[return (dyad : (ident x parm1:'u )(symbol [] ))]>
+<fun []*16 n[return (symbol [] )]>
+<fun Void accept<*17 x>[decl 'u y(ident x parm1:'u )]>
+<fun Void main>
+
+*/
+

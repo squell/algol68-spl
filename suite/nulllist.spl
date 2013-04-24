@@ -1,0 +1,15 @@
+Void foo(u x)
+{
+}
+
+Void bar([u] x)
+{
+    return;
+}
+
+Void main()
+{
+    foo( [] );   // I allow this (as we can choose the type of [] freely)
+    bar( [] );   // could not deduce concrete type for type variable u
+}
+

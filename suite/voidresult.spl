@@ -1,0 +1,9 @@
+u id(u x)
+{
+    return x;
+}
+
+Void main()
+{
+    id(5); // disallowed if type voiding = FALSE
+}

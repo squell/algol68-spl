@@ -1,0 +1,5 @@
+Void ascent(t x, Int n)
+{
+    if(n<=0) print(x); 
+    else ascent(x:[], n-1);
+}

@@ -1,0 +1,15 @@
+u f(u x) 
+{
+    return x;
+}
+
+Void g()
+{
+    print (23);
+}
+
+Void main()
+{
+    f(g()); // should not deduce a Void argument!
+}
+

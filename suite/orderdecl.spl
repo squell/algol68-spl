@@ -1,0 +1,7 @@
+Void main() 
+{
+    Int a = a; // a not found
+    Int x = y; // y not found
+    Int y = 5;
+    Int z = y; // ok
+}

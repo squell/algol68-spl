@@ -1,0 +1,5 @@
+a a(a a) 
+{
+    return a; // aaa, aa; aaa?
+}
+

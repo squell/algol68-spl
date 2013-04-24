@@ -1,0 +1,7 @@
+Void voidme(u x) { }
+
+Void main()
+{
+    voidme(hd([])); // could not deduce u
+}
+

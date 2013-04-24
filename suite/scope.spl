@@ -1,0 +1,5 @@
+Void f(Int x)
+{
+    { Int x = 2; } // ok.
+    Int x = 2; // error, x already defined
+}

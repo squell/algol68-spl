@@ -1,0 +1,5 @@
+Void x() 
+{
+    Int x = 5;
+    x(); // error, x is not a function
+}
