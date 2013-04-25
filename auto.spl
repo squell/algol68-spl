@@ -1,0 +1,14 @@
+t id(t x)
+{
+    return x;
+}
+
+Int main()
+{
+    Auto tup = (2+31 : 5*2 : [], (1:[]) : []);
+
+    Auto list = id([]);
+    list = 1:[];
+    //list = True:[];
+    /* */
+}

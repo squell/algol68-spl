@@ -1,0 +1,30 @@
+t magic()
+    { [t] ety = []; t x = hd(ety); return x; }
+
+(u,v) tuple()
+    { u x = magic();
+      v y = magic();
+      return (x,y); }
+
+(u,u) diag() 
+    { return tuple(); }
+
+u f((u,[u]) x)
+    { return fst(x); }
+
+u f1((u,(u,u)) x)
+    { return fst(x); }
+
+Void accept(t x) 
+    { }
+
+Bool notEmpty([u] lst)
+    { return !isEmpty(lst); }
+
+Void main()
+{
+    accept( f(diag()) );
+
+    Bool b = notEmpty([]);
+}
+
