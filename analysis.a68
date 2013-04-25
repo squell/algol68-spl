@@ -252,16 +252,18 @@ BEGIN
 		    [UPB types+1]REF TYPE seen; seen[2:] := types;
 		    FOR i FROM 2 TO UPB types DO IF types[i] IS types[1] THEN
 			TYPE inf = types[1]; types[1] := id OF unifier;
-			complain ("attempt to instantiate cyclic type "+name OF id OF unifier+" = "+REPR inf,  pos OF id OF call)
+			complain ("attempt to instantiate cyclic type "+name OF id OF unifier+" = "+REPR inf,  pos OF id OF call); exit
 		    FI OD;
 		    CASE types[1] IN
 			(SYMBOL s): IF s="Void" THEN complain ("attempt to instantiate "+name OF id OF unifier+" = Void", pos OF id OF call) FI,
 			(LISTT t): cycle check((seen[1]:=lt OF t; seen)),
 			(PAIRT t): (cycle check((seen[1]:=lt OF t; seen));
-				    cycle check((seen[1]:=rt OF t; seen)))
+				    cycle check((seen[1]:=rt OF t; seen))),
+			(TYPELNK k): cycle check((seen[1]:=alias OF k; seen))
 		    ESAC
 		END;
-		cycle check (type OF unifier)
+		cycle check (type OF unifier);
+		exit: SKIP
 	    OD;
 
 	CASE type sanity IN
@@ -361,10 +363,19 @@ BEGIN
 		lhs OF d %> integral
 	    FI,
 	(TUPLE t):
+	    BEGIN
+		HEAP TYPE u := 23, v := 23;
+		HEAP TYPE any tuple := PAIRT(u, v);
+		lhs OF t %> u;
+		rhs OF t %> v;
+		type identify (any tuple, type, pos OF t)
+	    END,
+	    # oldstyle
 	    CASE type IN (PAIRT p):
 		(lhs OF t %> lt OF p; rhs OF t %> rt OF p)
 	    OUT unification error (PAIRT(placeholder,placeholder), type, pos OF t)
 	    ESAC,
+	    #
 	(IDENT id):
 	    type identify (HEAP TYPE:=get var type (id), type, pos OF id),
 	(FUNCALL f):
@@ -380,6 +391,8 @@ BEGIN
     OP = = (REF TYPE a, b)BOOL:
     IF a IS b THEN TRUE ELSE
     CASE b IN
+	# TODO further analysis needed -- when is this called? #
+	(TYPELNK k): a = alias OF k, 
         (UNIFIER i): (6DEBUG (VOID: print((REPR b,":=",REPR a,new line)));
 	    CASE a IN
 		(UNIFIER j):
@@ -423,3 +436,4 @@ PR include "astprint.a68" PR
  )
 #
 
+# TODO magic #
