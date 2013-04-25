@@ -289,7 +289,7 @@ BEGIN
 		stm := DECLSTM(HEAP TYPE:=id,name,expr) 
 	    FI; REQUIRE ";"; TRUE
 	# auto-extension; prev: ELIF MATCH type THEN #
-	ELIF type:=0; MATCH type OREL MATCH "Auto" THEN 
+	ELIF type:=37; MATCH type OREL MATCH "Auto" THEN 
 	    IDENT name; REQUIRE name; REQUIRE "="; REQUIRE expr;
 	    # auto-extension; prev: no HEAP TYPE:= #
 	    stm := DECLSTM(HEAP TYPE:=type,name,expr); 
