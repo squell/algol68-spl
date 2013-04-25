@@ -377,7 +377,7 @@ BEGIN
 	    ESAC,
 	    #
 	(IDENT id):
-	    type identify (HEAP TYPE:=get var type (id), type, pos OF id),
+	    type identify (get var type (id), type, pos OF id),
 	(FUNCALL f):
 	    check function call(f, type)
     ESAC;
