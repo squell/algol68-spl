@@ -10,7 +10,7 @@ COMMENT
   1 - disallow infinite and empty types
   0 - allow improper types
 
-  type chaining - use a more powerful type unification
+  type deferral - use a more powerful type unification
   	* you should NOT need this with sanity = 3
 
   type voiding - discard function call results?
@@ -19,14 +19,15 @@ COMMENT
 
 INT  type sanity = 2;
 BOOL type voiding = FALSE;
-BOOL type chaining = TRUE;
+BOOL type deferral = TRUE;
+BOOL type chaining = FALSE;
 
 PROC semantic analysis = (REF DECLS ast)VOID:
 BEGIN
     TYPE void     := SYMBOL("Void", ~);
     TYPE integral := SYMBOL("Int", ~);
     TYPE boolean  := SYMBOL("Bool", ~);
-    TYPE placeholder := SYMBOL("*", ~);
+    #TYPE placeholder := SYMBOL("*", ~);#
     HEAP TYPE dont care;
 
     # cleverly using the dictionary to reason about scope #
@@ -72,14 +73,6 @@ BEGIN
 	   HEAP [0:UPB args OF call]PARAM fake param;
 	   FOR i FROM 0 TO UPB args OF call DO fake param[i] := PARAM(HEAP TYPE:=0, id OF call) OD;
 	   DECLFUN(fake param, NIL, NIL, HEAP FLEX[0]PARAM));
-
-    # this function only exists to provide a 'silent' alternative to the above #
-    PROC get unifiers = (FUNCALL call)REF[]PARAM:
-	IF DECLINFO found; retrieve (symbols, name OF id OF call, found) THEN
-	    (decl OF found | (DECLFUN fun): unifiers OF fun | HEAP[0]PARAM)
-	ELSE
-	    HEAP[0]PARAM
-	FI;
 
     INT frame size;
     INT frame offset;
@@ -246,6 +239,7 @@ BEGIN
 	PROC detect improper types = VOID:
 	    FOR i TO UPB unifiers OF decl DO 
 		PARAM unifier = (unifiers OF decl)[i];
+		cycle check (type OF unifier);
 
 		PROC cycle check = ([]REF TYPE types)VOID:
 		BEGIN 
@@ -262,7 +256,6 @@ BEGIN
 			(TYPELNK k): cycle check((seen[1]:=alias OF k; seen))
 		    ESAC
 		END;
-		cycle check (type OF unifier);
 		exit: SKIP
 	    OD;
 
@@ -272,14 +265,15 @@ BEGIN
 	     detect improper types),
 
 	    (type identify(type OF sign[0], target, pos OF id OF call);
+	     detect improper types; # prevent recursive error messages #
 	     type check arguments;
 	     all types instantiated;
 	     detect improper types),
 
 	    (type check arguments;
 	     all types instantiated;
-	     type identify(type OF sign[0], target, pos OF id OF call);
-	     detect improper types)
+	     detect improper types;
+	     type identify(type OF sign[0], target, pos OF id OF call))
 	OUT
 	     type identify(type OF sign[0], target, pos OF id OF call);
 	     type check arguments
@@ -290,6 +284,13 @@ BEGIN
 	    type OF unifier := i 
 	OD FI
     END;
+
+    PROC get unifiers = (FUNCALL call)REF[]PARAM:
+	IF DECLINFO found; retrieve (symbols, name OF id OF call, found) THEN
+	    (decl OF found | (DECLFUN fun): unifiers OF fun | HEAP[0]PARAM)
+	ELSE
+	    HEAP[0]PARAM
+	FI;
 
     PROC reset unifiers = (EXPR e)VOID:
     CASE e IN
@@ -396,7 +397,7 @@ BEGIN
         (UNIFIER i): (6DEBUG (VOID: print((REPR b,":=",REPR a,new line)));
 	    CASE a IN
 		(UNIFIER j):
-		    IF type chaining THEN
+		    IF type deferral THEN
 			a := TYPELNK(b,~); TRUE
 		    ELSE FALSE FI
 	    OUT b := a; TRUE
@@ -416,7 +417,7 @@ BEGIN
 	(UNIFIER i): (6DEBUG (VOID: print((REPR b,"=:",REPR a,new line)));
 	    a := b; TRUE)
 	COMMENT
-	    sanity = 3: this case should only validly apply in case of []; 
+	    sanity >= 2: this case should only validly apply in case of []; 
 	    any other use of a generic return type is forbidden elsewhere
 	COMMENT 
     OUT fatal error ("types types types!?"); ~
@@ -436,4 +437,3 @@ PR include "astprint.a68" PR
  )
 #
 
-# TODO magic #
