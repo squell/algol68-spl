@@ -321,7 +321,8 @@ BEGIN
     END;
 
     OP MATCH = (REF DECL decl)BOOL:
-	IF TYPE ret type := SYMBOL("Void", pos); MATCH ret type OR MATCH "Void" THEN
+	# auto extension; HEAP TYPE #
+	IF HEAP TYPE ret type := SYMBOL("Void", pos); MATCH ret type OR MATCH "Void" THEN
 	    IDENT id; REQUIRE id;
 	    IF MATCH "=" THEN
 		IF (ret type|(SYMBOL s): s="Void"|FALSE) THEN
@@ -346,7 +347,8 @@ BEGIN
 		    formal args := HEAP[0:0] PARAM
 		FI;
 		REQUIRE "{";
-		formal args[0] := (HEAP TYPE:=ret type, id);
+		# auto extension; HEAP TYPE:= removed #
+		formal args[0] := (ret type, id);
 		decl := DECLFUN(formal args, parse statements, HEAP INT, HEAP FLEX[0]PARAM)
 	    FI; TRUE
 	ELSE
