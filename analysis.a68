@@ -135,15 +135,6 @@ BEGIN
 	unifiers OF fun := type vars
     END;
 
-    # two routines easing iteration #
-
-    PROC for each decl = (REF DECLS list, PROC (REF DECL)VOID p)VOID:
-	(REF DECLS cur := list;
-	 WHILE REF DECLS(cur) ISNT NIL DO p(decl OF cur); cur := tail OF cur OD);
-    PROC for each stm = (REF STMLIST list, PROC (REF STM)VOID p)VOID:
-        (REF STMLIST cur := list;
-	 WHILE REF STMLIST(cur) ISNT NIL DO p(stm OF cur); cur := tail OF cur OD);
-
     for each decl(ast, (REF DECL this)VOID:
 	CASE this IN
 	(DECLSTM decl):
