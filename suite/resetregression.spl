@@ -1,0 +1,30 @@
+/*
+ if we use type chaining, should we or shouldnt we reset the unifiers
+ after each function deduction?
+
+ the following code doesnt work if we DO NOT reset those unifiers (since
+ the type of id() will be deduced in the left hand side of the tuple, and
+ then will remain fixed in that position until the end of the expression,
+ which means id(y) is a type mismatch
+
+*/
+
+t id(t x)
+    { return x; }
+
+/*
+(u,v) tuple(u x, v y)
+    { return (id(x), id(y)); }
+*/
+
+/* however, in the next case, doing this naively causes a problem as well */
+
+Void op(u x, u y)
+    { return; }
+
+Void main()
+{
+    // should produce an error
+    op(id(5), id(True));
+}
+
