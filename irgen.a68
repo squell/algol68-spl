@@ -1,0 +1,315 @@
+COMMENT
+
+  this does not (necessarily) build a IR tree, but translates a tree into a set of calls to
+  an abstract IR-emission library
+
+COMMENT
+
+PR include "ast.a68" PR
+PR include "util.a68" PR
+
+MODE LOCATION  = UNION(REGISTER,INDIRECT,DIRECT,IMMEDIATE,FLAGS);
+MODE TEMPORARY = UNION(REGISTER,INDIRECT);
+MODE REGISTER  = INT;
+MODE DIRECT    = STRING;
+MODE INDIRECT  = STRUCT(REGISTER base, INT offset);
+MODE IMMEDIATE = STRUCT(INT val, BOOL dummy);
+MODE FLAGS     = STRUCT(STRING cond, BOOL dummy);
+
+PR include "ir_x86.a68" PR
+
+BOOL simple optimizations = TRUE;
+
+PROC transduce = (REF DECLS ast)VOID:
+BEGIN
+    []STRING commutative ops = ("+", "*", "==", "!=");
+    PROC commutative = (STRING op)BOOL:
+	op MEMBER commutative ops;
+
+    PROC is register = (LOCATION loc)BOOL:
+	(loc | (REGISTER x): TRUE | FALSE);
+
+    PROC conflict = (LOCATION a,b)BOOL:
+	(a|(REGISTER p): (b|(REGISTER q): p = q | FALSE) | FALSE);
+
+    OP NOT = (FLAGS flag)FLAGS:
+	IF   cond OF flag = "ge" THEN FLAGS("lt", ~) 
+	ELIF cond OF flag = "le" THEN FLAGS("gt", ~)
+	ELIF cond OF flag = "gt" THEN FLAGS("le", ~)
+	ELIF cond OF flag = "lt" THEN FLAGS("ge", ~)
+	ELIF cond OF flag = "ne" THEN FLAGS("e", ~)
+	ELIF cond OF flag = "e" THEN FLAGS("ne", ~) 
+	ELSE fatal error ("flags unnegatable"); ~
+	FI;
+
+    FLAGS unconditional = ("",~);
+    DIRECT function exit;
+
+    emit begin;
+
+    for each decl (ast, (REF DECL dcl)VOID:
+	(dcl | (DECLSTM stm): emit global var (id OF stm) | SKIP)
+    );
+
+    for each decl (ast, (REF DECL dcl)VOID:
+	(dcl | (DECLFUN fun): 
+	    emit function (name OF id OF (args OF fun)[0], UPB args OF fun, frame size OF fun, VOID:
+		BEGIN
+		    function exit := obtain label;
+		    %body OF fun;
+		    emit label (function exit)
+		END)
+	    | SKIP)
+    );
+
+    emit startup;
+
+    for each decl (ast, (REF DECL dcl)VOID:
+	(dcl | (DECLSTM stm): %ASSIGN(id OF stm, value OF stm)  | SKIP)
+    );
+
+    emit prepare call (0);
+    emit call ("main", 0);
+
+    emit end;
+
+    # simple version, useful for testing 
+    PROC elaborate = (EXPR cond, STRING yes, no)VOID:
+    BEGIN
+	emit jump (yes, ?%cond);
+	emit jump (no, unconditional)
+    END;
+    #
+
+    PROC elaborate = (EXPR cond, STRING yes, no)VOID:
+    CASE cond IN
+	(DYAD d):
+	    IF repr OF op OF d = "&&" THEN
+		DIRECT tmp = obtain label;
+		elaborate (lhs OF d, tmp, no);
+		emit label (tmp);
+		elaborate (rhs OF d, yes, no)
+	    ELIF repr OF op OF d = "||" THEN
+		DIRECT tmp = obtain label;
+		elaborate (lhs OF d, yes, tmp);
+		emit label (tmp);
+		elaborate (rhs OF d, yes, no)
+	    ELSE
+		emit jump (no, NOT ?%cond)
+	    FI
+    OUT 
+	emit jump (no, NOT ?%cond)
+    ESAC;
+
+    OP % = (STM stm)VOID:
+    CASE stm IN
+	(ASSIGN stm):
+	    BEGIN
+		LOCATION src = %value OF stm;
+		LOCATION dst = %id OF stm;
+		emit move (dst, src)
+	    END,
+	(DECLSTM stm):
+	    %ASSIGN(id OF stm, value OF stm),
+	(FUNCALL call):
+	    discard (%call),
+	(RETURN ret):
+	    BEGIN
+		(value OF ret | (EXPR expr): 
+		    emit move(denote fun result, %expr));
+		emit jump (function exit, unconditional)
+	    END,
+	(REF STMLIST list):
+	    for each stm (list, (REF STM stm)VOID: %stm),
+	(IFSTM if):
+	    BEGIN
+		DIRECT kick start = obtain label;
+		DIRECT false = obtain label;
+		elaborate (cond OF if, kick start, false);
+		emit label (kick start);
+		%then OF if;
+		IF else OF if ISNT NIL THEN 
+		    DIRECT skip = obtain label;
+		    emit jump (skip, unconditional);
+		    emit label (false);
+		    %else OF if;
+		    emit label (skip)
+		ELSE
+		    emit label (false)
+		FI
+	    END,
+	(WHILESTM whl):
+	    BEGIN
+		DIRECT kick start = obtain label;
+		DIRECT loop = obtain label;
+		DIRECT exit = obtain label;
+		emit jump (kick start, unconditional);
+		emit label (loop);
+		%body OF whl;
+		emit label (kick start);
+		elaborate (cond OF whl, loop, exit);
+		emit label (exit)
+	    END
+    OUT fatal error ("WHUIhuihudf")
+    ESAC;
+
+    OP % = (LOCATION loc)REGISTER:
+    CASE loc IN
+	(REGISTER dir): dir
+    OUT 
+	REGISTER tmp = obtain temporary;
+	emit move (tmp, loc);
+	tmp
+    ESAC;
+
+    OP % = (EXPR expr)LOCATION:
+    CASE expr IN 
+	(SYMBOL sym):
+	    IF sym = "[]" OR sym = "False" THEN denote int (0) 
+	    ELIF sym = "True" THEN denote int (1) ELSE
+		fatal error ("unhandled symbol!?"); ~
+	    FI,
+	(CONST k):
+	    IF simple optimizations THEN
+		denote int (int OF k)
+	    ELSE
+		%denote int (int OF k)
+	    FI,
+	(IDENT id):
+	    CASE DECLINFO info = info OF id; decl OF info IN
+	    (PARAM p): denote parameter (pos OF info),
+	    (DECL d):  IF pos OF info /= 0 THEN 
+			   denote local var (pos OF info) 
+		       ELSE
+			   denote global var (name OF id)
+		       FI
+	    ESAC,
+	(TUPLE tup):
+	    BEGIN
+		LOCATION lhs = %lhs OF tup;
+		LOCATION rhs = %rhs OF tup;
+		make pair (lhs, rhs)
+	    END,
+	(FUNCALL fun):
+	    IF name OF id OF fun = "isEmpty" THEN
+		%(args OF fun)[1]
+	    ELIF name OF id OF fun MEMBER []STRING("hd", "fst") THEN
+		INDIRECT(%%(args OF fun)[1], 0)
+	    ELIF name OF id OF fun MEMBER []STRING("tl", "snd") THEN
+		INDIRECT(%%(args OF fun)[1], 1)
+	    ELSE
+		emit prepare call (UPB args OF fun);
+		FOR i TO UPB args OF fun DO
+		    LOCATION src = %(args OF fun)[i];
+		    emit push arg (src, i)
+		OD;
+		emit call (name OF id OF fun, UPB args OF fun);
+		IF simple optimizations THEN
+		    denote fun result
+		ELSE
+		    LOCATION result = obtain temporary;
+		    emit move (result, denote fun result);
+		    result
+		FI
+	    FI,
+	(MONAD expr):
+	    BEGIN
+		STRING op = repr OF op OF expr;
+		REGISTER lhs = %%lhs OF expr;
+		IF op = "!"   THEN 
+		    emit mon("not",)
+		ELIF op = "-" THEN 
+		    emit mon("neg",)
+		ELSE fatal error ("babies on spikes?!"); ~ 
+		FI (lhs)
+	    END,
+	 (DYAD expr):
+	    BEGIN
+		STRING op = repr OF op OF expr;
+		PROC (LOCATION,LOCATION)LOCATION emit dyop = 
+		    IF   op = "*" THEN emit bin("mul",,)
+		    ELIF op = "/" THEN emit bin("div",,)
+		    ELIF op = "%" THEN emit bin("mod",,)
+		    ELIF op = "+" THEN emit bin("add",,)
+		    ELIF op = "-" THEN emit bin("sub",,)
+		    ELIF op = ">" THEN emit cmp("gt",,)
+		    ELIF op = "<" THEN emit cmp("lt",,)
+		    ELIF op = ">=" THEN emit cmp("ge",,)
+		    ELIF op = "<=" THEN emit cmp("le",,)
+		    ELIF op = "==" THEN emit cmp("eq",,)
+		    ELIF op = "!=" THEN emit cmp("ne",,)
+		    ELIF op = ":" THEN make pair
+		    ELIF op = "&&" OR op = "||" THEN ~
+		    ELSE fatal error ("arranging matchboxes?!"); ~
+		    FI;
+
+		LOCATION lhs = %lhs OF expr;
+		IF op = "&&" OR op = "||" THEN
+		    DIRECT shortcut = obtain label;
+		    FLAGS lflag = ?lhs;
+		    emit jump (shortcut, (op="&&"|NOT lflag|lflag));
+		    FLAGS rflag = ?%rhs OF expr;
+		    IF simple optimizations AND cond OF lflag = cond OF rflag THEN
+			emit label (shortcut);
+			lflag
+		    ELSE
+			REGISTER result = obtain temporary;
+			DIRECT leave = obtain label;
+			#emit move (result, rflag);
+			emit jump (leave, unconditional);#
+			emit move (result, (op="&&"|1|0));
+			emit jump (leave, rflag);
+			emit label (shortcut);
+			emit move (result, (op="&&"|0|1));
+			emit label (leave);
+			result
+		    FI
+		ELIF commutative (op) AND NOT is register (lhs) AND simple optimizations THEN
+		    REGISTER rhs = %%rhs OF expr;
+		    emit dyop (rhs, lhs)
+		ELSE
+		    LOCATION rhs = %rhs OF expr;
+		    IF NOT conflict (lhs, rhs) THEN
+			emit dyop (%lhs, rhs)
+		    ELSE
+			LOCATION tmp = obtain temporary;
+			emit move (tmp, rhs);
+			emit dyop (%lhs, tmp)
+		    FI
+		FI
+	    END
+	OUT
+	    fatal error ("monkeys from outer space!"); ~
+    ESAC;
+
+    OP ? = (LOCATION loc)FLAGS:
+    CASE loc IN
+	(FLAGS f): f,
+	(IMMEDIATE i): 
+	    (emit cmp ("ne", %loc, IMMEDIATE(0,~)); FLAGS("ne", ~))
+    OUT
+	(emit cmp ("ne", loc, IMMEDIATE(0,~)); FLAGS("ne", ~))
+    ESAC;
+
+    PROC make pair = (LOCATION a, b)LOCATION:
+    BEGIN
+	REGISTER handle = obtain heap;
+	emit move (INDIRECT(handle, 0), a);
+	emit move (INDIRECT(handle, 1), b);
+	handle
+    END;
+	
+    SKIP
+END;
+
+PR include "analysis.a68" PR
+PR include "parser.a68" PR
+
+BEGIN
+    DECLS ast := parse file(argv(4));
+    semantic analysis (ast);
+    DUMP ast;
+    transduce (ast);
+    ~
+END
+
