@@ -1,0 +1,204 @@
+INT num tempor = 2;
+
+[0:7]STRUCT( 
+    [3]CHAR mnemonic,
+    INT usage
+) reg table;
+
+reg table[@1] := (
+    ("edi", 0),
+    ("esi", 0),
+    ("ebx", 0),
+    ("ecx", 0),
+    ("edx", 0),
+    ("eax", 0),
+    ("ebp", 0),
+    ("esp", 0)
+);
+
+PROC emit begin = VOID:
+    printf (($
+	".intel_syntax noprefix"l
+	".text"ll
+    $));
+PROC emit global var = (IDENT id)VOID: 
+    printf (($
+	".lcomm L"g", 4"ll
+    $, name OF id));
+PROC emit label = (STRING lbl)VOID: 
+    printf (($
+	"L"g":"l
+    $, lbl));
+PROC emit startup = VOID:
+    printf (($l
+	".global _start"l
+	"_start:"l
+    $));
+PROC emit end = VOID:
+    printf (($
+	4x"xor eax, eax"l
+	4x"inc eax"l
+	4x"int 0x80"l
+    $));
+
+INT arg counter;
+
+PROC emit function = (STRING name, INT args, loc, PROC VOID body)VOID:
+BEGIN
+    arg counter := args;
+    printf (($
+	"F"g":"l
+	4x"push ebp"l
+	4x"mov ebp, esp"l
+    $, name));
+    IF loc > 0 THEN printf (($4x"sub esp, "g(0)l$, loc*4)) FI;
+    body;
+    IF loc > 0 THEN printf (($4x"mov esp, ebp"l$)) FI;
+    printf (($
+	4x"pop ebp"l
+	4x"ret "g(0)ll
+    $, args*4))
+END;
+
+PROC emit call = (STRING name, INT arg size)VOID:
+BEGIN
+    reserve register (num tempor);
+    printf (($
+	4x"call F"gl
+    $, name))
+END;
+
+PROC emit prepare call = (INT arg size)VOID: 
+    SKIP;
+
+INT stack counter := 0;
+INT esp = 7;
+INT ebp = 6;
+
+PROC emit move = (LOCATION dst, src)VOID:
+    IF (src | (INDIRECT d): base OF d = esp AND offset OF d = stack counter | FALSE) THEN
+	printf (($
+	    4x"pop "gl
+	$, REPR dst));
+	stack counter -:= 1
+    ELIF (dst | (INDIRECT d): base OF d = esp AND offset OF d = stack counter+1 | FALSE) THEN
+	printf (($
+	    4x"push "gl
+	$, REPR dst));
+	stack counter +:= 1;
+	discard (src)
+    ELIF STRING tmp; (src | (FLAGS f): (tmp:=cond OF f; TRUE) | FALSE) THEN
+	printf (($
+	    4x"set"g" al"l
+	    4x"movzx "g", al"l
+	$, (tmp="ne"|tmp|tmp[1]), REPR dst))
+    ELSE 
+	printf (($
+	    4x"mov "g", "gl
+	$, REPR dst, REPR src));
+	discard (src)
+    FI;
+
+PROC emit push arg = (LOCATION loc, INT arg num)VOID:
+BEGIN
+    printf (($
+	4x"push "gl
+    $, REPR loc));
+    discard (loc)
+END;
+
+PROC emit jump = (STRING dest, FLAGS f)VOID:
+    printf (($
+	4x"j"g" L"gl
+    $, IF cond OF f = "" THEN "mp" ELIF cond OF f = "ne" THEN "ne" ELSE (cond OF f)[1] FI, dest));
+
+PROC emit bin = (STRING op, LOCATION dst,src)LOCATION:
+IF op = "div" OR op = "mod" THEN
+    #TODO# fatal error ("no div"); ~
+ELSE
+    printf (($
+	4xgxg", "gl
+    $, op, REPR dst, REPR src));
+    discard (src);
+    dst
+FI;
+
+PROC emit mon = (STRING op, LOCATION dst)LOCATION:
+BEGIN
+    printf (($
+	4xgxgl
+    $, op, REPR dst));
+    dst
+END;
+
+PROC emit cmp = (STRING op, LOCATION dst,src)LOCATION:
+BEGIN
+    emit bin ("cmp", dst, src);
+    FLAGS(op, ~)
+END;
+
+OP REPR = (LOCATION mem)STRING:
+    CASE mem IN
+	(IMMEDIATE imm): whole(val OF imm,0),
+	(DIRECT str): str,
+	(REGISTER reg): mnemonic OF reg table[reg],
+	#TODO: esp#
+	(INDIRECT ind): "[" + mnemonic OF reg table[base OF ind] + "+" + whole(offset OF ind,0) + "]",
+	(FLAGS flag): (fatal error("condition has no representation: "+cond OF flag); ~)
+    ESAC;
+
+PROC denote parameter = (INT i)LOCATION:
+    INDIRECT(ebp, 8+(arg counter-i)*4);
+PROC denote local var = (INT i)LOCATION:
+    INDIRECT(ebp, -i*4);
+PROC denote global var = (STRING name)LOCATION:
+    DIRECT("[L"+name+"]");
+PROC denote int = (INT val)LOCATION:
+    IMMEDIATE(val,~);
+PROC denote fun result = REGISTER:
+    REGISTER(num tempor);
+
+INT label counter := 0;
+
+PROC obtain label = DIRECT:
+    whole(label counter+:=1,0);
+
+PROC obtain heap = REGISTER:
+BEGIN
+    printf(($
+	4x"mov eax, [_heapptr]"l
+	4x"add eax, 8"l
+	4x"mov [_heapptr], eax"l
+    $));
+    denote fun result
+END;
+
+INT temp counter := -1;
+
+PROC reserve register = (REGISTER n)VOID:
+BEGIN
+    IF usage OF reg table[n] > 0 THEN
+	printf(($4x"push "gl$, mnemonic OF reg table[n]))
+    FI;
+    usage OF reg table[n] +:= 1;
+    5DEBUG (VOID: print ((reg table, new line)))
+END;
+
+PROC obtain temporary = REGISTER:
+BEGIN
+    INT n = temp counter := (temp counter+1) MOD num tempor;
+    reserve register (n);
+    n
+END;
+
+PROC discard = (LOCATION tmp)VOID:
+CASE tmp IN
+(REGISTER reg): 
+    IF usage OF reg table[reg] > 0 THEN
+	IF (usage OF reg table[reg]-:= 1) > 0 THEN
+	    printf(($4x"pop "gl$, mnemonic OF reg table[reg]))
+	FI
+    FI,
+(INDIRECT ind):
+    discard (base OF ind)
+ESAC;
