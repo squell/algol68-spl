@@ -1,0 +1,156 @@
+#
+    AST-level optimizations; used to help the back-end code generator
+    - constant folding (for ints only)
+    - left-balance expressions
+#
+
+PROC optimize = (REF DECLS ast)VOID:
+    for each decl (ast, (REF DECL dcl)VOID:
+    CASE dcl IN
+	(DECLSTM stm):
+	    dcl := DECLSTM(type OF stm, id OF stm, optimize expression (value OF stm, LOC INT)),
+	(DECLFUN fun):
+	BEGIN
+	    PROC opt = (EXPR expr)EXPR:
+		optimize expression (expr, LOC INT);
+
+	    PROC optimize stm = (REF STM stm)VOID:
+		CASE stm IN
+		    (REF STMLIST lst): 
+			for each stm (lst, optimize stm),
+		    (IFSTM if):
+			(optimize stm (then OF if);
+			 IF else OF if ISNT NIL THEN 
+			    optimize stm (else OF if) FI),
+		    (WHILESTM w):
+			optimize stm (body OF w),
+		    (ASSIGN ass):
+			stm := ASSIGN(id OF ass, opt(value OF ass)),
+		    (DECLSTM dcl):
+			stm := DECLSTM(type OF dcl, id OF dcl, opt(value OF dcl)),
+		    (FUNCALL fun):
+			FOR i TO UPB args OF fun DO
+			    (args OF fun)[i] := opt((args OF fun)[i])
+			OD,
+		    (RETURN ret):
+			CASE value OF ret IN
+			    (EXPR exp): 
+				stm := RETURN(opt(exp), pos OF ret)
+			ESAC
+		ESAC;
+	    for each stm (body OF fun, optimize stm)
+	END
+    ESAC);
+
+PROC optimize expression = (EXPR expr, REF INT cost)EXPR:
+CASE expr IN
+    (MONAD m):
+	BEGIN
+	    HEAP EXPR lhs := optimize expression (lhs OF m, cost);
+	    CASE lhs IN
+		(CONST k):
+		    IF op OF m = "-" THEN 
+			CONST(-int OF k, pos OF k)
+		    ELSE expr FI
+	    OUT
+		MONAD(op OF m, lhs)
+	    ESAC
+	END,
+    (DYAD bin):
+	BEGIN
+	    DYAD d = transit(bin);
+
+	    INT c1, c2;
+	    HEAP EXPR lhs := optimize expression (lhs OF d, c1);
+	    HEAP EXPR rhs := optimize expression (rhs OF d, c2);
+	    cost := c1+1;
+
+	    PRIO -> = 9;
+	    OP -> = (EXPR expr, REF INT val)BOOL:
+		(expr|(CONST k): (val:=int OF k; TRUE) | FALSE);
+	    OP -> = (EXPR expr, REF DYAD sub)BOOL:
+		(expr|(DYAD d): (sub:=d; TRUE) | FALSE);
+
+	    OP PM = (SYMBOL op)BOOL:
+		char in string ((repr OF op)[1], NIL, "+-");
+	    OP NOT = (SYMBOL op)SYMBOL:
+		IF repr OF op = "+" THEN ("-",pos OF op) ELSE ("+", pos OF op) FI;
+
+	    DYAD comm :=
+		IF (op OF d = "+" OR op OF d = "*") AND c1 < c2 THEN
+		    cost := c2+1;
+		    transit((op OF d, rhs, lhs))
+		ELIF op OF d = "-" AND c1 < c2 THEN
+		    cost := c2+1;
+		    transit((SYMBOL("+",pos OF op OF d), HEAP EXPR:=MONAD(SYMBOL("-",pos OF op OF d),rhs), lhs))
+		ELSE
+		    (op OF d, lhs, rhs)
+		FI;
+
+	    PROC transit = (DYAD p)DYAD:
+	    BEGIN
+		DYAD sub;
+		IF op OF p = "*" AND (rhs OF p->sub|op OF sub="*"|FALSE) THEN
+		    DYAD q = transit (sub);
+		    (op OF p, HEAP EXPR:=transit((op OF p, lhs OF p, lhs OF q)), rhs OF q)
+		ELIF PM op OF p AND (rhs OF p->sub| PM op OF sub |FALSE) THEN
+		    DYAD q = transit (sub);
+		    (IF op OF p = "+" THEN op OF q ELSE NOT op OF q FI, 
+		     HEAP EXPR:=transit((op OF p, lhs OF p, lhs OF q)), rhs OF q)
+		ELSE
+		    DYAD(op OF p, HEAP EXPR:=(lhs OF p->sub|transit(sub)|lhs OF p),
+		                  HEAP EXPR:=(rhs OF p->sub|transit(sub)|rhs OF p))
+		FI
+	    END;
+
+	    INT v1, v2;
+	    IF lhs OF comm->v1 AND rhs OF comm->v2 THEN
+		IF op OF comm = "+" THEN
+		    cost := 0;
+		    CONST(v1+v2,~)
+		ELIF op OF comm = "-" THEN
+		    cost := 0;
+		    CONST(v1-v2,~)
+		ELIF op OF comm = "*" THEN
+		    cost := 0;
+		    CONST(v1*v2,~)
+		ELIF op OF comm = "/" THEN
+		    cost := 0;
+		    CONST(v1 % v2,~)
+		ELIF op OF comm = "%" THEN
+		    cost := 0;
+		    CONST(v1 MOD v2,~)
+		ELSE
+		    expr
+		FI
+	    ELSE
+		comm
+	    FI
+	END,
+    (TUPLE d):
+	BEGIN
+	    INT c1, c2;
+	    HEAP EXPR lhs := optimize expression (lhs OF d, c1);
+	    HEAP EXPR rhs := optimize expression (rhs OF d, c2);
+	    cost := (c1>c2 | c1 | c2);
+	    TUPLE(lhs, rhs, pos OF d)
+	END,
+    (FUNCALL f):
+	BEGIN
+	    HEAP[UPB args OF f]EXPR new args;
+	    cost := 0;
+	    FOR i TO UPB new args DO
+		INT tmp;
+		new args[i] := optimize expression ((args OF f)[i], tmp);
+		IF cost < tmp THEN cost := tmp FI
+	    OD;
+	    cost +:= 16;
+	    FUNCALL(id OF f, new args)
+	END,
+    (CONST k):
+	(cost := 0; expr),
+    (SYMBOL k):
+	(cost := 0; expr),
+    (IDENT id):
+	(cost := 1; expr)
+ESAC;
