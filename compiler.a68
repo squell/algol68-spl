@@ -1,5 +1,6 @@
 PR include "parser.a68" PR
 PR include "analysis.a68" PR
+PR include "transform.a68" PR
 PR heap=1024M PR
 PR handles=128M PR
 PR stack=8M PR
@@ -9,8 +10,12 @@ BEGIN
     DECLS ast := parse file(argv(4)); 
     no complaints ("parsing");
 
+    pretty print (ast);
+
     semantic analysis (ast);
     no complaints ("type checking");
 
-    DUMP ast
+    optimize (ast);
+
+    pretty print (ast)
 END
