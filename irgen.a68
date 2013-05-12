@@ -7,6 +7,7 @@ COMMENT
 
 PR include "ast.a68" PR
 PR include "util.a68" PR
+PR include "transform.a68" PR
 
 MODE LOCATION  = UNION(REGISTER,INDIRECT,DIRECT,IMMEDIATE,FLAGS);
 MODE TEMPORARY = UNION(REGISTER,INDIRECT);
@@ -18,7 +19,22 @@ MODE FLAGS     = STRUCT(STRING cond, BOOL dummy);
 
 PR include "ir_x86.a68" PR
 
-BOOL simple optimizations = TRUE;
+COMMENT
+    return optimization 
+	- use function result directly.  
+	  this causes the checks using the 'conflict' function to become necessary
+	- flag optimization
+	  a neat trick to save on a conditional jumps in if statements
+	- commute optimization
+	  saves on a temporary if the lhs is not a register but the rhs is
+	- rewrite optimization
+	  rewrites expressions to fit FCFS allocation better; but may hinder ILP
+COMMENT
+
+BOOL return optimization = TRUE;
+BOOL flag optimization = TRUE;
+BOOL commute optimization = TRUE;
+BOOL rewrite optimization = TRUE;
 
 PROC transduce = (REF DECLS ast)VOID:
 BEGIN
@@ -33,14 +49,7 @@ BEGIN
 	(a|(REGISTER p): (b|(REGISTER q): p = q | FALSE) | FALSE);
 
     OP NOT = (FLAGS flag)FLAGS:
-	IF   cond OF flag = "ge" THEN FLAGS("lt", ~) 
-	ELIF cond OF flag = "le" THEN FLAGS("gt", ~)
-	ELIF cond OF flag = "gt" THEN FLAGS("le", ~)
-	ELIF cond OF flag = "lt" THEN FLAGS("ge", ~)
-	ELIF cond OF flag = "ne" THEN FLAGS("e", ~)
-	ELIF cond OF flag = "e" THEN FLAGS("ne", ~) 
-	ELSE fatal error ("flags unnegatable"); ~
-	FI;
+	IF (cond OF flag)[1] = "n" THEN FLAGS((cond OF flag)[2:], ~) ELSE FLAGS("n"+cond OF flag,~) FI;
 
     FLAGS unconditional = ("",~);
     DIRECT function exit;
@@ -116,7 +125,8 @@ BEGIN
 	(RETURN ret):
 	    BEGIN
 		(value OF ret | (EXPR expr): 
-		    emit move(denote fun result, %expr));
+		    (LOCATION tmp = %expr; IF NOT conflict (denote fun result, tmp) THEN
+			emit move(denote fun result, tmp) FI));
 		emit jump (function exit, unconditional)
 	    END,
 	(REF STMLIST list):
@@ -163,18 +173,14 @@ BEGIN
     ESAC;
 
     OP % = (EXPR expr)LOCATION:
-    CASE expr IN 
+    CASE (rewrite optimization| optimize expression(expr,LOC INT) |expr) IN 
 	(SYMBOL sym):
 	    IF sym = "[]" OR sym = "False" THEN denote int (0) 
 	    ELIF sym = "True" THEN denote int (1) ELSE
 		fatal error ("unhandled symbol!?"); ~
 	    FI,
 	(CONST k):
-	    IF simple optimizations THEN
-		denote int (int OF k)
-	    ELSE
-		%denote int (int OF k)
-	    FI,
+	    denote int (int OF k),
 	(IDENT id):
 	    CASE DECLINFO info = info OF id; decl OF info IN
 	    (PARAM p): denote parameter (pos OF info),
@@ -192,7 +198,7 @@ BEGIN
 	    END,
 	(FUNCALL fun):
 	    IF name OF id OF fun = "isEmpty" THEN
-		%(args OF fun)[1]
+		emit cmp("e", %(args OF fun)[1], denote int(0))
 	    ELIF name OF id OF fun MEMBER []STRING("hd", "fst") THEN
 		INDIRECT(%%(args OF fun)[1], 0)
 	    ELIF name OF id OF fun MEMBER []STRING("tl", "snd") THEN
@@ -204,7 +210,7 @@ BEGIN
 		    emit push arg (src, i)
 		OD;
 		emit call (name OF id OF fun, UPB args OF fun);
-		IF simple optimizations THEN
+		IF return optimization THEN
 		    denote fun result
 		ELSE
 		    LOCATION result = obtain temporary;
@@ -236,7 +242,7 @@ BEGIN
 		    ELIF op = "<" THEN emit cmp("lt",,)
 		    ELIF op = ">=" THEN emit cmp("ge",,)
 		    ELIF op = "<=" THEN emit cmp("le",,)
-		    ELIF op = "==" THEN emit cmp("eq",,)
+		    ELIF op = "==" THEN emit cmp("e",,)
 		    ELIF op = "!=" THEN emit cmp("ne",,)
 		    ELIF op = ":" THEN make pair
 		    ELIF op = "&&" OR op = "||" THEN ~
@@ -249,7 +255,7 @@ BEGIN
 		    FLAGS lflag = ?lhs;
 		    emit jump (shortcut, (op="&&"|NOT lflag|lflag));
 		    FLAGS rflag = ?%rhs OF expr;
-		    IF simple optimizations AND cond OF lflag = cond OF rflag THEN
+		    IF flag optimization AND cond OF lflag = cond OF rflag THEN
 			emit label (shortcut);
 			lflag
 		    ELSE
@@ -264,7 +270,7 @@ BEGIN
 			emit label (leave);
 			result
 		    FI
-		ELIF commutative (op) AND NOT is register (lhs) AND simple optimizations THEN
+		ELIF commutative (op) AND NOT is register (lhs) AND commute optimization THEN
 		    REGISTER rhs = %%rhs OF expr;
 		    emit dyop (rhs, lhs)
 		ELSE
@@ -308,7 +314,7 @@ PR include "parser.a68" PR
 BEGIN
     DECLS ast := parse file(argv(4));
     semantic analysis (ast);
-    DUMP ast;
+    no complaints ("type checking");
     transduce (ast);
     ~
 END
