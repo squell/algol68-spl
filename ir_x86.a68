@@ -1,4 +1,4 @@
-INT num tempor = 2;
+INT num tempor = 5;
 
 [0:7]STRUCT( 
     [3]CHAR mnemonic,
@@ -17,10 +17,54 @@ reg table[@1] := (
 );
 
 PROC emit begin = VOID:
+BEGIN
     printf (($
 	".intel_syntax noprefix"l
 	".text"ll
     $));
+    library functions
+END;
+
+PROC library functions = VOID:
+BEGIN
+    printf (($
+        "Fprint:"l
+	4x"mov eax, [esp+4]"l
+	4x"cdq"l
+	4x"xor eax, edx"l
+	4x"sub eax, edx"l
+	4x"neg edx"l
+	4x"lea edx, [43+edx*2]"l
+	4x"mov ebx, 10"l
+	4x"sub esp, 12"l
+	4x"mov [esp], dl"l
+	4x"mov [esp+ebx], bl"l
+	4x"mov ecx, 9"l
+
+	".Ldivloop:"l
+	4x"xor edx, edx"l
+	4x"div ebx"l
+	4x"add dl, 48"l
+	4x"mov [esp+ecx], dl"l
+	4x"test eax, eax"l
+	4x"loopnz .Ldivloop"l
+	4x"jecxz .Lskip"l
+	".Lpadloop:"l
+	4x"mov byte ptr [esp+ecx], 32"l
+	4x"loop .Lpadloop"l
+	".Lskip:"l
+
+	4x"mov edx, 11"l
+	4x"xor ebx, ebx"l
+	4x"inc ebx"l
+	4x"lea ecx, [esp]"l
+	4x"mov eax, 4"l
+	4x"int 0x80"l
+	4x"add esp, 12"l
+	4x"ret 4"ll
+    $))
+END;
+
 PROC emit global var = (IDENT id)VOID: 
     printf (($
 	".lcomm L"g", 4"ll
@@ -43,7 +87,22 @@ PROC emit end = VOID:
 
 INT arg counter;
 
+# may be slower, but more compact #
 PROC emit function = (STRING name, INT args, loc, PROC VOID body)VOID:
+BEGIN
+    arg counter := args;
+    printf (($
+	"F"g":"l
+	4x"enter "g(0)", 0"l
+    $, name, loc*4));
+    body;
+    printf (($
+	4x"leave"l
+	4x"ret "g(0)ll
+    $, args*4))
+END;
+
+PROC emit function raw = (STRING name, INT args, loc, PROC VOID body)VOID:
 BEGIN
     arg counter := args;
     printf (($
@@ -62,15 +121,24 @@ END;
 
 PROC emit call = (STRING name, INT arg size)VOID:
 BEGIN
-    reserve register (num tempor);
     printf (($
 	4x"call F"gl
-    $, name))
+    $, name));
+    FOR i FROM 0 TO num tempor-1 DO
+	IF usage OF reg table[i] > 0 THEN discard (i) FI
+    OD
 END;
 
 PROC emit prepare call = (INT arg size)VOID: 
-    SKIP;
+BEGIN
+    reserve register (num tempor);
+    FOR i FROM 0 TO num tempor-1 DO
+	IF usage OF reg table[i] > 0 THEN reserve register (i) FI
+    OD
+END;
 
+# the 'virtual stack' approach is currently useless, since not all
+  pushes and pops are currently tracked; don't use esp-based addressing! #
 INT stack counter := 0;
 INT esp = 7;
 INT ebp = 6;
@@ -88,10 +156,17 @@ PROC emit move = (LOCATION dst, src)VOID:
 	stack counter +:= 1;
 	discard (src)
     ELIF STRING tmp; (src | (FLAGS f): (tmp:=cond OF f; TRUE) | FALSE) THEN
-	printf (($
-	    4x"set"g" al"l
-	    4x"movzx "g", al"l
-	$, (tmp="ne"|tmp|tmp[1]), REPR dst))
+	IF tmp = "" THEN
+	    fatal error ("an inconvenient truth")
+	ELSE
+	    reserve register (num tempor);
+	    printf (($
+		4x"set"g" al"l
+		4x"movzx eax, al"l
+		4x"mov "g", eax"l
+	    $, (tmp="ne"|tmp|tmp[1]), REPR dst));
+	    discard (num tempor)
+	FI
     ELSE 
 	printf (($
 	    4x"mov "g", "gl
@@ -110,18 +185,30 @@ END;
 PROC emit jump = (STRING dest, FLAGS f)VOID:
     printf (($
 	4x"j"g" L"gl
-    $, IF cond OF f = "" THEN "mp" ELIF cond OF f = "ne" THEN "ne" ELSE (cond OF f)[1] FI, dest));
+    $, IF STRING cc = cond OF f; cc = "" THEN "mp" ELIF cc[UPB cc] = "t" THEN cc[1:UPB cc-1] ELSE cc FI, dest));
 
 PROC emit bin = (STRING op, LOCATION dst,src)LOCATION:
-IF op = "div" OR op = "mod" THEN
-    #TODO# fatal error ("no div"); ~
-ELSE
-    printf (($
-	4xgxg", "gl
-    $, op, REPR dst, REPR src));
-    discard (src);
-    dst
-FI;
+BEGIN
+    IF op = "div" OR op = "mod" THEN
+	[]REGISTER result = IF op="div" THEN (5,4) ELSE (4,5) FI;
+	reserve register (result[1]);
+	reserve register (result[2]);
+	printf(($
+	    4x"push ",gl
+	    4x"mov eax, "gl
+	    4x"cdq"l
+	    4x"idiv "gl
+	    4x"pop "gl
+	$, REPR src, REPR dst, mnemonic OF reg table[result[2]]));
+	discard (result[2]);
+	result[1]
+    ELIF op = "mul" THEN
+	printf(($4x"imul "g", "gl$, REPR dst, REPR src))
+    ELSE
+	printf(($4xgxg", "gl$, op, REPR dst, REPR src))
+    FI;
+    discard (src); dst
+END;
 
 PROC emit mon = (STRING op, LOCATION dst)LOCATION:
 BEGIN
@@ -140,19 +227,23 @@ END;
 OP REPR = (LOCATION mem)STRING:
     CASE mem IN
 	(IMMEDIATE imm): whole(val OF imm,0),
-	(DIRECT str): str,
+	(DIRECT str): "dword ptr ["+str+"]",
 	(REGISTER reg): mnemonic OF reg table[reg],
-	#TODO: esp#
-	(INDIRECT ind): "[" + mnemonic OF reg table[base OF ind] + "+" + whole(offset OF ind,0) + "]",
+	(INDIRECT ind): 
+	    IF base OF ind = 7 THEN
+		"dword ptr [esp+" + whole((offset OF ind-stack counter)*4,0) + "]"
+	    ELSE
+		"dword ptr [" + mnemonic OF reg table[base OF ind] + "+" + whole(offset OF ind*4,0) + "]"
+	    FI,
 	(FLAGS flag): (fatal error("condition has no representation: "+cond OF flag); ~)
     ESAC;
 
 PROC denote parameter = (INT i)LOCATION:
-    INDIRECT(ebp, 8+(arg counter-i)*4);
+    INDIRECT(ebp, 2+(arg counter-i));
 PROC denote local var = (INT i)LOCATION:
-    INDIRECT(ebp, -i*4);
+    INDIRECT(ebp, -i);
 PROC denote global var = (STRING name)LOCATION:
-    DIRECT("[L"+name+"]");
+    DIRECT("L"+name);
 PROC denote int = (INT val)LOCATION:
     IMMEDIATE(val,~);
 PROC denote fun result = REGISTER:
