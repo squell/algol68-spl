@@ -1,0 +1,24 @@
+/* this file fails on two accounts if type chaining is set to FALSE */
+
+// this should fail: the deduction of f(src) cannot be undone before the end 
+
+[t] f([t] xs) { }
+
+Void delayed([Bool] src)
+{
+    [[Int]] fail = f(src) : (1:[]):[];
+}
+
+// on the other hand, this should succeed 
+
+Void simple([Bool] src)
+{
+    [[Bool]] tmp = f(src) : [];
+}
+
+Void main()
+{
+    [Int] ety = [];
+    [Int] x = f(ety);
+}
+
