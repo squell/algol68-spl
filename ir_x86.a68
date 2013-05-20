@@ -1,4 +1,8 @@
+#TODO: fix the "mov esi, [esi]" bug #
+
 INT num tempor = 5;
+
+FILE asm := stand out;
 
 [0:7]STRUCT( 
     [3]CHAR mnemonic,
@@ -18,18 +22,26 @@ reg table[@1] := (
 
 PROC emit begin = VOID:
 BEGIN
-    printf (($
+    putf (asm, ($
 	".intel_syntax noprefix"l
 	".text"ll
+	".lcomm heapptr, 4"ll
+	".lcomm heap, 4*0x100000"ll
     $));
     library functions
 END;
 
+# right now, we apply a very dirty hack to see if a number if an integer or a tuple #
 PROC library functions = VOID:
 BEGIN
-    printf (($
+    putf (asm, ($
         "Fprint:"l
 	4x"mov eax, [esp+4]"l
+	4x"mov edx, eax"l
+	4x"shr edx, 24"l
+	4x"cmp edx, 0x8"l
+	4x"je .Lcompound"l
+	".Lmistake:"l
 	4x"cdq"l
 	4x"xor eax, edx"l
 	4x"sub eax, edx"l
@@ -62,24 +74,37 @@ BEGIN
 	4x"int 0x80"l
 	4x"add esp, 12"l
 	4x"ret 4"ll
+
+        ".Lcompound:"l
+	4x"test eax, 0x3"l
+	4x"jnz .Lmistake"l
+	4x"push [eax]"l
+	4x"mov eax, [eax+4]"l
+	4x"mov [esp+8], eax"l
+	4x"call Fprint"l
+	4x"cmp dword ptr [esp+4], 0"l
+	4x"jne Fprint"l
+	4x"ret 4"ll
     $))
 END;
 
 PROC emit global var = (IDENT id)VOID: 
-    printf (($
+    putf (asm, ($
 	".lcomm L"g", 4"ll
     $, name OF id));
 PROC emit label = (STRING lbl)VOID: 
-    printf (($
+    putf (asm, ($
 	"L"g":"l
     $, lbl));
 PROC emit startup = VOID:
-    printf (($l
+    putf (asm, ($l
 	".global _start"l
 	"_start:"l
+	4x"lea eax, [heap]"l
+	4x"mov [heapptr], eax"l
     $));
 PROC emit end = VOID:
-    printf (($
+    putf (asm, ($
 	4x"xor eax, eax"l
 	4x"inc eax"l
 	4x"int 0x80"l
@@ -87,53 +112,53 @@ PROC emit end = VOID:
 
 INT arg counter;
 
-# may be slower, but more compact #
-PROC emit function = (STRING name, INT args, loc, PROC VOID body)VOID:
+PROC emit prolog = (STRING name, INT args, loc)VOID:
 BEGIN
     arg counter := args;
-    printf (($
-	"F"g":"l
-	4x"enter "g(0)", 0"l
-    $, name, loc*4));
-    body;
-    printf (($
-	4x"leave"l
-	4x"ret "g(0)ll
-    $, args*4))
-END;
-
-PROC emit function raw = (STRING name, INT args, loc, PROC VOID body)VOID:
-BEGIN
-    arg counter := args;
-    printf (($
+    #putf (asm, ($
 	"F"g":"l
 	4x"push ebp"l
 	4x"mov ebp, esp"l
     $, name));
-    IF loc > 0 THEN printf (($4x"sub esp, "g(0)l$, loc*4)) FI;
-    body;
-    IF loc > 0 THEN printf (($4x"mov esp, ebp"l$)) FI;
-    printf (($
-	4x"pop ebp"l
-	4x"ret "g(0)ll
-    $, args*4))
+    IF loc > 0 THEN putf (asm, ($4x"sub esp, "g(0)l$, loc*4)) FI#
+    putf (asm, ($
+	"F"g":"l
+	4x"enter "g(0)", 0"l
+    $, name, loc*4))
 END;
 
-PROC emit call = (STRING name, INT arg size)VOID:
+PROC emit epilog = VOID:
 BEGIN
-    printf (($
-	4x"call F"gl
-    $, name));
-    FOR i FROM 0 TO num tempor-1 DO
-	IF usage OF reg table[i] > 0 THEN discard (i) FI
-    OD
+    putf (asm, ($
+	4x"leave"l
+	4x"ret "g(0)ll
+    $, arg counter*4));
+    #IF loc > 0 THEN putf (asm, ($4x"mov esp, ebp"l$)) FI;
+    putf (asm, ($
+	4x"pop ebp"l
+	4x"ret "g(0)ll
+    $, arg counter*4));#
+    discard (REGISTER(num tempor))
 END;
 
 PROC emit prepare call = (INT arg size)VOID: 
 BEGIN
     reserve register (num tempor);
+    # emit code to preserve, but delay using it until call is complete #
+    usage OF reg table[num tempor] -:= 1; 
     FOR i FROM 0 TO num tempor-1 DO
 	IF usage OF reg table[i] > 0 THEN reserve register (i) FI
+    OD
+END;
+
+PROC emit call = (STRING name, INT arg size)VOID:
+BEGIN
+    putf (asm, ($
+	4x"call F"gl
+    $, name));
+    usage OF reg table[num tempor] +:= 1;
+    FOR i FROM 0 TO num tempor-1 DO
+	IF usage OF reg table[i] > 0 THEN discard (i) FI
     OD
 END;
 
@@ -145,12 +170,12 @@ INT ebp = 6;
 
 PROC emit move = (LOCATION dst, src)VOID:
     IF (src | (INDIRECT d): base OF d = esp AND offset OF d = stack counter | FALSE) THEN
-	printf (($
+	putf (asm, ($
 	    4x"pop "gl
 	$, REPR dst));
 	stack counter -:= 1
     ELIF (dst | (INDIRECT d): base OF d = esp AND offset OF d = stack counter+1 | FALSE) THEN
-	printf (($
+	putf (asm, ($
 	    4x"push "gl
 	$, REPR dst));
 	stack counter +:= 1;
@@ -160,30 +185,35 @@ PROC emit move = (LOCATION dst, src)VOID:
 	    fatal error ("an inconvenient truth")
 	ELSE
 	    reserve register (num tempor);
-	    printf (($
+	    putf (asm, ($
 		4x"set"g" al"l
 		4x"movzx eax, al"l
 		4x"mov "g", eax"l
 	    $, (tmp="ne"|tmp|tmp[1]), REPR dst));
 	    discard (num tempor)
 	FI
-    ELSE 
-	printf (($
+    ELIF (dst | (REGISTER r): TRUE | FALSE) OR (src | (REGISTER r): TRUE, (IMMEDIATE i): TRUE | FALSE) THEN
+	putf (asm, ($
 	    4x"mov "g", "gl
 	$, REPR dst, REPR src));
 	discard (src)
+    ELSE
+	reserve register (num tempor);
+	emit move (num tempor, src);
+	emit move (dst, num tempor);
+	discard (num tempor)
     FI;
 
 PROC emit push arg = (LOCATION loc, INT arg num)VOID:
 BEGIN
-    printf (($
+    putf (asm, ($
 	4x"push "gl
     $, REPR loc));
     discard (loc)
 END;
 
 PROC emit jump = (STRING dest, FLAGS f)VOID:
-    printf (($
+    putf (asm, ($
 	4x"j"g" L"gl
     $, IF STRING cc = cond OF f; cc = "" THEN "mp" ELIF cc[UPB cc] = "t" THEN cc[1:UPB cc-1] ELSE cc FI, dest));
 
@@ -191,43 +221,54 @@ PROC emit bin = (STRING op, LOCATION dst,src)LOCATION:
 BEGIN
     IF op = "div" OR op = "mod" THEN
 	[]REGISTER result = IF op="div" THEN (5,4) ELSE (4,5) FI;
-	reserve register (result[1]);
+	BOOL direct result = (dst | (REGISTER reg): reg = result[1] | FALSE);
+	IF NOT direct result THEN 
+	    reserve register (result[1])
+	FI;
 	reserve register (result[2]);
-	printf(($
+	putf (asm, ($
 	    4x"push ",gl
 	    4x"mov eax, "gl
 	    4x"cdq"l
-	    4x"idiv "gl
-	    4x"pop "gl
-	$, REPR src, REPR dst, mnemonic OF reg table[result[2]]));
+	    4x"idiv dword ptr [esp]"l
+	    4x"add esp, 4"l
+	$, REPR src, REPR dst));
 	discard (result[2]);
-	result[1]
+	IF NOT direct result THEN
+	    emit move(dst, result[1])
+	FI
     ELIF op = "mul" THEN
-	printf(($4x"imul "g", "gl$, REPR dst, REPR src))
+	putf (asm, ($4x"imul "g", "gl$, REPR dst, REPR src))
     ELSE
-	printf(($4xgxg", "gl$, op, REPR dst, REPR src))
+	putf (asm, ($4xgxg", "gl$, op, REPR dst, REPR src))
     FI;
     discard (src); dst
 END;
 
 PROC emit mon = (STRING op, LOCATION dst)LOCATION:
-BEGIN
-    printf (($
+IF op = "not" THEN
+    putf (asm, ($
+	4x"xor "g", 1"l
+    $, REPR dst));
+    dst
+ELSE
+    putf (asm, ($
 	4xgxgl
     $, op, REPR dst));
     dst
-END;
+FI;
 
 PROC emit cmp = (STRING op, LOCATION dst,src)LOCATION:
 BEGIN
     emit bin ("cmp", dst, src);
+    discard (dst);
     FLAGS(op, ~)
 END;
 
 OP REPR = (LOCATION mem)STRING:
     CASE mem IN
 	(IMMEDIATE imm): whole(val OF imm,0),
-	(DIRECT str): "dword ptr ["+str+"]",
+	(LABEL str): "dword ptr ["+str+"]",
 	(REGISTER reg): mnemonic OF reg table[reg],
 	(INDIRECT ind): 
 	    IF base OF ind = 7 THEN
@@ -243,7 +284,7 @@ PROC denote parameter = (INT i)LOCATION:
 PROC denote local var = (INT i)LOCATION:
     INDIRECT(ebp, -i);
 PROC denote global var = (STRING name)LOCATION:
-    DIRECT("L"+name);
+    LABEL("L"+name);
 PROC denote int = (INT val)LOCATION:
     IMMEDIATE(val,~);
 PROC denote fun result = REGISTER:
@@ -251,28 +292,35 @@ PROC denote fun result = REGISTER:
 
 INT label counter := 0;
 
-PROC obtain label = DIRECT:
+PROC obtain label = LABEL:
     whole(label counter+:=1,0);
 
 PROC obtain heap = REGISTER:
 BEGIN
-    printf(($
-	4x"mov eax, [_heapptr]"l
-	4x"add eax, 8"l
-	4x"mov [_heapptr], eax"l
-    $));
-    denote fun result
+    REGISTER hnd = obtain temporary;
+    reserve register (num tempor);
+    putf (asm, ($
+	4x"mov "g", dword ptr [heapptr]"l
+	4x"add "g", 8"l
+	4x"mov eax, dword ptr ["g"]"l
+	4x"test eax, eax"l
+	4x"cmovz eax, "gl
+	4x"mov dword ptr [heapptr], eax"l
+    $, REPR hnd, REPR hnd, REPR hnd, REPR hnd));
+    discard (num tempor);
+    hnd
 END;
 
 INT temp counter := -1;
 
 PROC reserve register = (REGISTER n)VOID:
 BEGIN
+    5DEBUG (VOID: print (("pre:",reg table, new line)));
     IF usage OF reg table[n] > 0 THEN
-	printf(($4x"push "gl$, mnemonic OF reg table[n]))
+	putf (asm, ($4x"push "gl$, mnemonic OF reg table[n]))
     FI;
     usage OF reg table[n] +:= 1;
-    5DEBUG (VOID: print ((reg table, new line)))
+    5DEBUG (VOID: print (("pst:",reg table, new line)))
 END;
 
 PROC obtain temporary = REGISTER:
@@ -287,7 +335,7 @@ CASE tmp IN
 (REGISTER reg): 
     IF usage OF reg table[reg] > 0 THEN
 	IF (usage OF reg table[reg]-:= 1) > 0 THEN
-	    printf(($4x"pop "gl$, mnemonic OF reg table[reg]))
+	    putf (asm, ($4x"pop "gl$, mnemonic OF reg table[reg]))
 	FI
     FI,
 (INDIRECT ind):

@@ -9,10 +9,10 @@ PR include "ast.a68" PR
 PR include "util.a68" PR
 PR include "transform.a68" PR
 
-MODE LOCATION  = UNION(REGISTER,INDIRECT,DIRECT,IMMEDIATE,FLAGS);
+MODE LOCATION  = UNION(REGISTER,INDIRECT,LABEL,IMMEDIATE,FLAGS);
 MODE TEMPORARY = UNION(REGISTER,INDIRECT);
 MODE REGISTER  = INT;
-MODE DIRECT    = STRING;
+MODE LABEL    = STRING;
 MODE INDIRECT  = STRUCT(REGISTER base, INT offset);
 MODE IMMEDIATE = STRUCT(INT val, BOOL dummy);
 MODE FLAGS     = STRUCT(STRING cond, BOOL dummy);
@@ -20,21 +20,24 @@ MODE FLAGS     = STRUCT(STRING cond, BOOL dummy);
 PR include "ir_x86.a68" PR
 
 COMMENT
+    premature optimizations; the root of all evil
+
     return optimization 
 	- use function result directly.  
-	  this causes the checks using the 'conflict' function to become necessary
-	- flag optimization
-	  a neat trick to save on a conditional jumps in if statements
-	- commute optimization
+	  this causes the checks using the 'conflict' function to become necessary;
+	  right now this "optimization" causes incorrect behaviour
+    flag optimization
+	  a trick to save on a conditional jumps in if statements
+    commute optimization
 	  saves on a temporary if the lhs is not a register but the rhs is
-	- rewrite optimization
-	  rewrites expressions to fit FCFS allocation better; but may hinder ILP
+    rewrite optimization
+	  rewrites expressions to fit FCFS allocation better
 COMMENT
 
-BOOL return optimization = TRUE;
+BOOL return optimization = FALSE;
 BOOL flag optimization = TRUE;
 BOOL commute optimization = TRUE;
-BOOL rewrite optimization = TRUE;
+BOOL rewrite optimization = FALSE;
 
 PROC transduce = (REF DECLS ast)VOID:
 BEGIN
@@ -52,7 +55,6 @@ BEGIN
 	IF (cond OF flag)[1] = "n" THEN FLAGS((cond OF flag)[2:], ~) ELSE FLAGS("n"+cond OF flag,~) FI;
 
     FLAGS unconditional = ("",~);
-    DIRECT function exit;
 
     emit begin;
 
@@ -62,13 +64,11 @@ BEGIN
 
     for each decl (ast, (REF DECL dcl)VOID:
 	(dcl | (DECLFUN fun): 
-	    emit function (name OF id OF (args OF fun)[0], UPB args OF fun, frame size OF fun, VOID:
-		BEGIN
-		    function exit := obtain label;
-		    %body OF fun;
-		    emit label (function exit)
-		END)
-	    | SKIP)
+	    BEGIN
+		emit prolog (name OF id OF (args OF fun)[0], UPB args OF fun, frame size OF fun);
+		%body OF fun;
+		emit epilog
+	    END | SKIP)
     );
 
     emit startup;
@@ -82,33 +82,41 @@ BEGIN
 
     emit end;
 
-    # simple version, useful for testing 
-    PROC elaborate = (EXPR cond, STRING yes, no)VOID:
-    BEGIN
-	emit jump (yes, ?%cond);
-	emit jump (no, unconditional)
-    END;
-    #
+    COMMENT
+	transduce boolean expressions; go to YES if true, NO otherwise;
+	if 'assumed' is true, the labels 'yes' is assumed to immediately follow;
+	otherwise 'no' is assumed to follow
+    COMMENT
+    PROC elaborate = (EXPR cond, BOOL assumed, LABEL yes, no)VOID:
+    BEGIN 
+	PROC default = VOID:
+	    IF assumed THEN emit jump (no, NOT ?%cond) ELSE emit jump (yes, ?%cond) FI;
 
-    PROC elaborate = (EXPR cond, STRING yes, no)VOID:
-    CASE cond IN
-	(DYAD d):
-	    IF repr OF op OF d = "&&" THEN
-		DIRECT tmp = obtain label;
-		elaborate (lhs OF d, tmp, no);
-		emit label (tmp);
-		elaborate (rhs OF d, yes, no)
-	    ELIF repr OF op OF d = "||" THEN
-		DIRECT tmp = obtain label;
-		elaborate (lhs OF d, yes, tmp);
-		emit label (tmp);
-		elaborate (rhs OF d, yes, no)
-	    ELSE
-		emit jump (no, NOT ?%cond)
-	    FI
-    OUT 
-	emit jump (no, NOT ?%cond)
-    ESAC;
+	CASE cond IN
+	    (DYAD d):
+		IF repr OF op OF d = "&&" THEN
+		    LABEL tmp = obtain label;
+		    elaborate (lhs OF d, TRUE, tmp, no);
+		    emit label (tmp);
+		    elaborate (rhs OF d, assumed, yes, no)
+		ELIF repr OF op OF d = "||" THEN
+		    LABEL tmp = obtain label;
+		    elaborate (lhs OF d, FALSE, yes, tmp);
+		    emit label (tmp);
+		    elaborate (rhs OF d, assumed, yes, no)
+		ELSE
+		    default
+		FI,
+	    (MONAD m):
+		IF repr OF op OF m = "!" THEN
+		    elaborate (lhs OF m, NOT assumed, no, yes)
+		ELSE
+		    default
+		FI
+	OUT 
+	    default
+	ESAC 
+    END;
 
     OP % = (STM stm)VOID:
     CASE stm IN
@@ -124,22 +132,22 @@ BEGIN
 	    discard (%call),
 	(RETURN ret):
 	    BEGIN
-		(value OF ret | (EXPR expr): 
-		    (LOCATION tmp = %expr; IF NOT conflict (denote fun result, tmp) THEN
-			emit move(denote fun result, tmp) FI));
-		emit jump (function exit, unconditional)
+		(value OF ret | (EXPR expr):
+		    IF LOCATION tmp = %expr; NOT conflict (denote fun result, tmp) THEN
+			emit move (denote fun result, tmp) FI);
+		emit epilog
 	    END,
 	(REF STMLIST list):
 	    for each stm (list, (REF STM stm)VOID: %stm),
 	(IFSTM if):
 	    BEGIN
-		DIRECT kick start = obtain label;
-		DIRECT false = obtain label;
-		elaborate (cond OF if, kick start, false);
+		LABEL kick start = obtain label;
+		LABEL false = obtain label;
+		elaborate (cond OF if, TRUE, kick start, false);
 		emit label (kick start);
 		%then OF if;
 		IF else OF if ISNT NIL THEN 
-		    DIRECT skip = obtain label;
+		    LABEL skip = obtain label;
 		    emit jump (skip, unconditional);
 		    emit label (false);
 		    %else OF if;
@@ -150,14 +158,14 @@ BEGIN
 	    END,
 	(WHILESTM whl):
 	    BEGIN
-		DIRECT kick start = obtain label;
-		DIRECT loop = obtain label;
-		DIRECT exit = obtain label;
+		LABEL kick start = obtain label;
+		LABEL loop = obtain label;
+		LABEL exit = obtain label;
 		emit jump (kick start, unconditional);
 		emit label (loop);
 		%body OF whl;
 		emit label (kick start);
-		elaborate (cond OF whl, loop, exit);
+		elaborate (cond OF whl, FALSE, loop, exit);
 		emit label (exit)
 	    END
     OUT fatal error ("WHUIhuihudf")
@@ -192,8 +200,8 @@ BEGIN
 	    ESAC,
 	(TUPLE tup):
 	    BEGIN
-		LOCATION lhs = %lhs OF tup;
-		LOCATION rhs = %rhs OF tup;
+		LOCATION lhs = !%lhs OF tup;
+		LOCATION rhs = !%rhs OF tup;
 		make pair (lhs, rhs)
 	    END,
 	(FUNCALL fun):
@@ -206,7 +214,7 @@ BEGIN
 	    ELSE
 		emit prepare call (UPB args OF fun);
 		FOR i TO UPB args OF fun DO
-		    LOCATION src = %(args OF fun)[i];
+		    LOCATION src = !%(args OF fun)[i];
 		    emit push arg (src, i)
 		OD;
 		emit call (name OF id OF fun, UPB args OF fun);
@@ -229,7 +237,7 @@ BEGIN
 		ELSE fatal error ("babies on spikes?!"); ~ 
 		FI (lhs)
 	    END,
-	 (DYAD expr):
+	(DYAD expr):
 	    BEGIN
 		STRING op = repr OF op OF expr;
 		PROC (LOCATION,LOCATION)LOCATION emit dyop = 
@@ -249,10 +257,10 @@ BEGIN
 		    ELSE fatal error ("arranging matchboxes?!"); ~
 		    FI;
 
-		LOCATION lhs = %lhs OF expr;
+		# todo: simplify: replace this with a call to elaborate #
 		IF op = "&&" OR op = "||" THEN
-		    DIRECT shortcut = obtain label;
-		    FLAGS lflag = ?lhs;
+		    LABEL shortcut = obtain label;
+		    FLAGS lflag = ?%lhs OF expr;
 		    emit jump (shortcut, (op="&&"|NOT lflag|lflag));
 		    FLAGS rflag = ?%rhs OF expr;
 		    IF flag optimization AND cond OF lflag = cond OF rflag THEN
@@ -260,7 +268,7 @@ BEGIN
 			lflag
 		    ELSE
 			REGISTER result = obtain temporary;
-			DIRECT leave = obtain label;
+			LABEL leave = obtain label;
 			#emit move (result, rflag);
 			emit jump (leave, unconditional);#
 			emit move (result, (op="&&"|1|0));
@@ -270,11 +278,12 @@ BEGIN
 			emit label (leave);
 			result
 		    FI
-		ELIF commutative (op) AND NOT is register (lhs) AND commute optimization THEN
-		    REGISTER rhs = %%rhs OF expr;
-		    emit dyop (rhs, lhs)
+		ELIF 
+		    LOCATION lhs = !%lhs OF expr;
+		    LOCATION rhs = !%rhs OF expr;
+		    commutative (op) AND NOT is register (lhs) AND is register (rhs) AND commute optimization THEN
+		    emit dyop (%rhs, lhs)
 		ELSE
-		    LOCATION rhs = %rhs OF expr;
 		    IF NOT conflict (lhs, rhs) THEN
 			emit dyop (%lhs, rhs)
 		    ELSE
@@ -288,14 +297,19 @@ BEGIN
 	    fatal error ("monkeys from outer space!"); ~
     ESAC;
 
+    # two operators for converting to/from flags #
     OP ? = (LOCATION loc)FLAGS:
     CASE loc IN
 	(FLAGS f): f,
 	(IMMEDIATE i): 
 	    (emit cmp ("ne", %loc, IMMEDIATE(0,~)); FLAGS("ne", ~))
     OUT
-	(emit cmp ("ne", loc, IMMEDIATE(0,~)); FLAGS("ne", ~))
+	emit cmp ("ne", loc, IMMEDIATE(0,~)); 
+	FLAGS("ne", ~)
     ESAC;
+
+    OP ! = (LOCATION loc)LOCATION:
+	(loc | (FLAGS f): %f | loc);
 
     PROC make pair = (LOCATION a, b)LOCATION:
     BEGIN
@@ -307,15 +321,4 @@ BEGIN
 	
     SKIP
 END;
-
-PR include "analysis.a68" PR
-PR include "parser.a68" PR
-
-BEGIN
-    DECLS ast := parse file(argv(4));
-    semantic analysis (ast);
-    no complaints ("type checking");
-    transduce (ast);
-    ~
-END
 
