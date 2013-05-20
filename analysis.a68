@@ -17,10 +17,12 @@ COMMENT
    	* if FALSE, only Void functions can be statements
 COMMENT
 
-INT  type sanity = 2;
-BOOL type voiding = FALSE;
-BOOL type deferral = TRUE;
-BOOL type chaining = FALSE;
+# TODO: should make a copy of the type signature for every call #
+
+INT  type sanity = 3;
+BOOL type voiding = TRUE;
+BOOL type deferral = FALSE;
+BOOL type chaining = TRUE;
 
 PROC semantic analysis = (REF DECLS ast)VOID:
 BEGIN
@@ -112,6 +114,7 @@ BEGIN
 	DICT types := new dictionary(1);
 	INT count := 0;
 	FOR i FROM 0 TO UPB args OF fun DO
+
 	    PROC edit type = (REF TYPE type)REF TYPE:
 	    CASE type IN
 		(LISTT t): HEAP TYPE:=LISTT(edit type (lt OF t),0),
@@ -126,6 +129,7 @@ BEGIN
 		    FI
 	    OUT type
 	    ESAC;
+
 	    REF REF TYPE cur = type OF (args OF fun)[i];
 	    cur := edit type(cur)
 	OD;
@@ -274,6 +278,7 @@ BEGIN
 	    PARAM unifier = (unifiers OF decl)[i];
 	    type OF unifier := i 
 	OD FI
+
     END;
 
     PROC get unifiers = (FUNCALL call)REF[]PARAM:
