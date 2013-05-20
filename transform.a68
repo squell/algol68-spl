@@ -76,11 +76,19 @@ CASE expr IN
 	    OP NOT = (SYMBOL op)SYMBOL:
 		IF repr OF op = "+" THEN ("-",pos OF op) ELSE ("+", pos OF op) FI;
 
+	    STRING op = repr OF op OF d;
 	    DYAD comm :=
-		IF (op OF d = "+" OR op OF d = "*") AND c1 < c2 THEN
+		IF (op = "+" OR op = "*") AND c1 < c2 THEN
 		    cost := c2+1;
 		    transit((op OF d, rhs, lhs))
-		ELIF op OF d = "-" AND c1 < c2 THEN
+		ELIF (op = "=" OR op = "!=") AND c1 < c2 THEN
+		    cost := c2+1;
+		    transit((op OF d, rhs, lhs))
+		ELIF (op[1] = "<" OR op[1] = ">") AND c1 < c2 THEN
+		    STRING flip = (op[1]="<"|">"|"<") + op[2:];
+		    cost := c2+1;
+		    transit((SYMBOL(flip,pos OF op OF d), rhs, lhs))
+		ELIF op = "-" AND c1 < c2 THEN
 		    cost := c2+1;
 		    transit((SYMBOL("+",pos OF op OF d), HEAP EXPR:=MONAD(SYMBOL("-",pos OF op OF d),rhs), lhs))
 		ELSE
