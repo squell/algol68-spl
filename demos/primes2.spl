@@ -1,0 +1,31 @@
+[u] reverse([u] xs)
+{
+    [u] suffix = [];
+    while(!isEmpty(xs)) {
+	suffix = hd(xs) : suffix;
+	xs = tl(xs);
+    }
+    return suffix;
+}
+
+/* sieve of eratosthenes */
+
+[Int] primes(Int max) 
+{
+    [Int] list = [];
+    Int n = 1;
+    while(n < max) {
+	n = n+1;
+	[Int] tmp = list;
+	while(!isEmpty(tmp) && n%hd(tmp) != 0)
+	    tmp = tl(tmp);
+	if(isEmpty(tmp))
+	    list = n:list;
+    }
+    return reverse(list);
+}
+
+Void main()
+{
+    print(primes(100));
+}

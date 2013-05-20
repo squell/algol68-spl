@@ -1,0 +1,67 @@
+Int x = 1;
+Int y = 2;
+Int z = 3;
+
+Void main()
+{
+    Int i = 1+2+3+4+5; 
+    Bool b = i<i-(i+i)+(i-i);
+    i = (2+3)*(x-(y+z));
+}
+
+/* without the source-level transformation:
+
+Fmain:
+    enter 8, 0
+    mov edi, 1
+    add edi, 2
+    add edi, 3
+    add edi, 4
+    add edi, 5
+    mov dword ptr [ebp+-4], edi
+    mov esi, dword ptr [ebp+-4]
+    add esi, dword ptr [ebp+-4]
+    mov ebx, dword ptr [ebp+-4]
+    sub ebx, esi
+    mov ecx, dword ptr [ebp+-4]
+    sub ecx, dword ptr [ebp+-4]
+    add ebx, ecx
+    mov edx, dword ptr [ebp+-4]
+    cmp edx, ebx
+    setl al
+    movzx eax, al
+    mov dword ptr [ebp+-8], eax
+    mov edi, 2
+    add edi, 3
+    mov esi, dword ptr [Ly]
+    add esi, dword ptr [Lz]
+    mov ebx, dword ptr [Lx]
+    sub ebx, esi
+    imul edi, ebx
+    mov dword ptr [ebp+-4], edi
+    leave
+    ret 0
+
+with the source-level transformation:
+
+Fmain:
+    enter 8, 0
+    mov dword ptr [ebp+-4], 15
+    mov edi, dword ptr [ebp+-4]
+    sub edi, dword ptr [ebp+-4]
+    sub edi, dword ptr [ebp+-4]
+    add edi, dword ptr [ebp+-4]
+    sub edi, dword ptr [ebp+-4]
+    cmp edi, dword ptr [ebp+-4]
+    setg al
+    movzx eax, al
+    mov dword ptr [ebp+-8], eax
+    mov esi, dword ptr [Lx]
+    sub esi, dword ptr [Ly]
+    sub esi, dword ptr [Lz]
+    imul esi, 5
+    mov dword ptr [ebp+-4], esi
+    leave
+    ret 0
+
+*/

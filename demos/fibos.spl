@@ -1,0 +1,22 @@
+Int fibr(Int n)
+{
+    if(n <= 1) return n;
+    return fibr(n-1) + fibr(n-2);
+}
+
+Int fibl(Int n) 
+{
+    (Int,Int) state = (1,0);
+    while(n > 0) {
+	state = (snd(state), fst(state)+snd(state));
+	n = n-1;
+    }
+    return snd(state);
+}
+
+Void main()
+{
+    print(fibr(17));
+    print(fibl(17));
+}
+

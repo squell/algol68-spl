@@ -1,0 +1,56 @@
+[Int] range(Int begin, Int end)
+{
+    [Int] tmp = [];
+    while(begin <= end) {
+	tmp = end:tmp;
+	end = end-1;
+    }
+    return tmp;
+}
+
+[(u,v)] zip([u] xs, [v] ys)
+{
+    if(isEmpty(xs) || isEmpty(ys)) return [];
+    return (hd(xs), hd(ys)) : zip(tl(xs), tl(ys));
+}
+
+[u] filter([(u,Bool)] list)
+{
+    if(!isEmpty(list)) {
+	(u,Bool) head = hd(list);
+	[u] tail = filter(tl(list));
+	if(snd(head))
+	    return fst(head) : tail;
+	else
+	    return tail;
+    } else
+	return [];
+}
+
+[Bool] divisible(Int divisor, [Int] numbers)
+{
+    if(isEmpty(numbers))
+	return [];
+    else
+     	return hd(numbers)%divisor != 0 : divisible(divisor, tl(numbers));
+}
+
+[Int] sieve([Int] numbers)
+{
+    if(isEmpty(numbers)) return [];
+
+    [Bool] check = True : divisible(hd(numbers), tl(numbers));
+    [Int] newnum = filter(zip(numbers,check));
+    return hd(newnum) : sieve(tl(newnum));
+}
+
+[Int] primes(Int max)
+{
+    return sieve(range(2, max));
+}
+
+Void main()
+{
+    print(primes(100));
+}
+

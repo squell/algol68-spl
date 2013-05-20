@@ -1,0 +1,52 @@
+[t] add([t] xs, [t] ys)
+{
+    while(!isEmpty(ys)) {
+	xs = hd(ys) : xs;
+	ys = tl(ys);
+    }
+    return xs;
+}
+
+[[u]] perms([u] src)
+{
+    if(isEmpty(src))
+	return []:[];
+
+    u x = hd(src);
+
+    [[u]] xxs = perms(tl(src));
+    [[u]] out = [];
+
+    while(!isEmpty(xxs)) {
+	[u] cur = hd(xxs);
+	xxs = tl(xxs);
+	[u] build = [];
+	while(!isEmpty(cur)) {
+	    out = add(cur, x:build): out;
+	    build = hd(cur) : build;
+	    cur = tl(cur);
+	}
+	out = add(cur, x:build): out;
+    }
+    return out;
+}
+
+Int compact([Int] lst)
+{
+    Int x = 0;
+    while(!isEmpty(lst)) {
+	x = x*10 + hd(lst);
+	lst = tl(lst);
+    }
+    return x;
+}
+
+Void main()
+{
+    [[Int]] p = perms(1:2:3:4:5:[]);
+    while(!isEmpty(p)) {
+	print(compact(hd(p)));
+	p = tl(p);
+    }
+}
+

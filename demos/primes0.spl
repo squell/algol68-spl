@@ -1,0 +1,29 @@
+/* a list of prime numbers */
+
+Bool isPrime(Int val)
+{
+    Int x = val-1;
+    while(x > 1)
+	if(val % x == 0) 
+	    return False;
+	else 
+	    x = x-1;
+    return True;
+}
+
+[Int] primes(Int n) 
+{
+    [Int] list = [];
+    while(n > 1) {
+	if(isPrime(n))
+	    list = n:list;
+	n = n-1;
+    }
+    return list;
+}
+
+Void main()
+{
+    print(primes(100));
+}
+

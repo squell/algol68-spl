@@ -1,0 +1,32 @@
+[u] append([u] xs, [u] ys)
+{
+    if(isEmpty(xs)) 
+	return ys;
+    return hd(xs) : append(tl(xs), ys);
+}
+
+/* sieve of eratosthenes */
+
+[Int] primes(Int max) 
+{
+    [Int] list = [];
+    Int n = 1;
+    while(n < max) {
+	n = n+1;
+	Bool viable = True;
+	[Int] tmp = list;
+	while(!isEmpty(tmp) && viable) {
+	    if(n % hd(tmp) == 0)
+		viable = False;
+	    tmp = tl(tmp);
+	}
+	if(viable)
+	    list = append(list, n:[]);
+    }
+    return list;
+}
+
+Void main()
+{
+    print(primes(100));
+}

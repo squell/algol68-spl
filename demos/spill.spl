@@ -1,0 +1,42 @@
+Int x = 2;
+
+Void main()
+{
+    x = (x+x)*(x+x)+(x+x)*(x+x)+(x+x)*(x+x);
+}
+
+/*
+
+things to note:
+1) temporaries get allocated round-robin; e.g. after "imul edi, esi",
+ the register "esi" is free, but never gets chosen again
+
+2) instead, "edi" gets chosen twice, so code to push/pop it is necessary
+
+Fmain:
+    enter 0, 0
+    mov edi, dword ptr [Lx]
+    add edi, dword ptr [Lx]
+    mov esi, dword ptr [Lx]
+    add esi, dword ptr [Lx]
+    imul edi, esi
+    mov ebx, dword ptr [Lx]
+    add ebx, dword ptr [Lx]
+    mov ecx, dword ptr [Lx]
+    add ecx, dword ptr [Lx]
+    imul ebx, ecx
+    add edi, ebx
+    mov edx, dword ptr [Lx]
+    add edx, dword ptr [Lx]
+    push edi			#!
+    mov edi, dword ptr [Lx]
+    add edi, dword ptr [Lx]
+    imul edx, edi
+    pop edi
+    add edi, edx
+    mov dword ptr [Lx], edi
+    leave
+    ret 0
+
+*/
+

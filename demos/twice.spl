@@ -1,0 +1,15 @@
+// this demonstates that function instantiation is different from C++
+
+Void twice(u val, Int log2)
+{
+    if(log2 == 0)
+	print(val);
+    else 
+	twice((val,val), log2-1);
+}
+
+Void main()
+{
+    twice(42, 5);
+}
+
