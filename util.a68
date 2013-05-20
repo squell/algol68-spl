@@ -72,3 +72,8 @@ PROC no complaints = (STRING when)VOID:
 PROC fatal error = (STRING why)VOID:
     ( print ("fatal: "+why); halt );
 
+PROC external program = ([]STRING args)VOID:
+BEGIN
+    wait pid(execve child (args[1], args, ""))
+END;
+

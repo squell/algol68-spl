@@ -1,21 +1,40 @@
 PR include "parser.a68" PR
 PR include "analysis.a68" PR
-PR include "transform.a68" PR
+PR include "irgen.a68" PR
+PR include "ir_x86.a68" PR
 PR heap=1024M PR
 PR handles=128M PR
 PR stack=8M PR
 PR frame=8M PR
 
-BEGIN
-    DECLS ast := parse file(argv(4)); 
-    no complaints ("parsing");
+PROC assemble = (STRING asm name, obj name)VOID:
+    external program (("/usr/bin/as", "--32", "-o"+obj name, asm name));
 
-    pretty print (ast);
+PROC link = (STRING obj name, bin name)VOID:
+BEGIN
+    external program (("/usr/bin/ld", "-s", "-m", "elf_i386", "-o"+bin name, obj name));
+    external program (("/bin/chmod", "+x", bin name))
+END;
+
+BEGIN
+    STRING src name = 
+	argv(4);
+    STRING base name = 
+	IF INT i; last char in string (".", i, src name) THEN src name[1:i-1] ELSE src name FI;
+
+    DECLS ast := parse file(src name); 
+    no complaints ("parsing");
 
     semantic analysis (ast);
     no complaints ("type checking");
 
-    optimize (ast);
+    open (asm, base name+".s", stand out channel);
+    transduce (ast);
+    no complaints ("compiling");
 
-    pretty print (ast)
+    assemble (basename+".s", basename+".o");
+    no complaints ("assembling");
+
+    link (basename+".o", basename);
+    no complaints ("linking")
 END
