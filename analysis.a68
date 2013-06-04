@@ -22,7 +22,7 @@ COMMENT
 INT  type sanity = 3;
 BOOL type voiding = TRUE;
 BOOL type deferral = FALSE;
-BOOL type chaining = TRUE;
+BOOL type chaining = FALSE;
 
 PROC semantic analysis = (REF DECLS ast)VOID:
 BEGIN

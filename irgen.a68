@@ -37,7 +37,7 @@ COMMENT
 BOOL return optimization = FALSE;
 BOOL flag optimization = TRUE;
 BOOL commute optimization = TRUE;
-BOOL rewrite optimization = FALSE;
+BOOL rewrite optimization = TRUE;
 
 PROC transduce = (REF DECLS ast)VOID:
 BEGIN
