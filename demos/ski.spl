@@ -1,0 +1,79 @@
+/* "proof" that SPL is turing complete;
+   method: writing a SK-reducer */
+
+[u] append([u] a, [u] b)
+{ 
+    [u] tmp = [];
+    while(!isEmpty(a)) {
+        tmp = hd(a) : tmp;
+        a = tl(a);
+    }
+    while(!isEmpty(tmp)) {
+        b = hd(tmp) : b;
+        tmp = tl(tmp);
+    }
+    return b;
+}
+
+([Int], [Int]) rewrite([Int] expr)
+{  
+    Int args = 0;
+    while(!isEmpty(expr)) { 
+        // remove superfluous 'parenthesis'
+        while(hd(expr) >= 0) {
+            args = args + hd(expr);
+            expr = tl(expr);
+        }
+
+        if(args >= 2 && hd(expr)==-1) {
+            ([Int],[Int]) e1 = rewrite(tl(expr));
+            ([Int],[Int]) e2 = rewrite(snd(e1));
+            expr = append(fst(e1),snd(e2));
+            args = args-2;
+        } else if(args >= 3 && hd(expr)==-2) {
+            ([Int],[Int]) e1 = rewrite(tl(expr));
+            ([Int],[Int]) e2 = rewrite(snd(e1));
+            ([Int],[Int]) e3 = rewrite(snd(e2));
+            expr = append(append(append(fst(e1),fst(e3)), 1:append(fst(e2),fst(e3))),
+                          snd(e3));
+            args = args-3+2;
+	} else if(args <= 0) {
+	    return (hd(expr):[], tl(expr));
+        } else {
+	    [Int] gather = args:[];
+	    while(args >= 0) {
+		args = args-1;
+		([Int], [Int]) chew = rewrite(expr);
+		gather = append(gather, fst(chew));
+		expr = snd(chew);
+	    }
+	    return (gather, expr);
+        }
+    }
+    return ([],[]);
+}
+
+/* note: -1 = K, -2 = S, -3 .. etc are constants; positive numbers denote the number
+   of arguments belonging to the next item (which correspond to the number of 
+   ```` you would write in unlambda notation)
+
+   e.g.:
+    
+    3 -2 -1 -1 -5 = ```skk5 = SKK5 => 5
+
+    3 -2 -1 -2 -4 = ```sk24 = SK24 => 4
+
+    The 'reversal expression':
+    4 -2 1 -1 1 -2 2 -2 -1 -1 -1 -6 -9
+      = ````s`k`s``skkk 6 9 
+      = S(K(SI))K69
+     => `9 6   
+*/
+
+Void main()
+{
+    // this should output: +1 -42 -23
+    ([Int],[Int]) x = rewrite(4:-2:1:-1:1:-2:2:-2:-1:-1:-1:-23:-42:[]);
+    print(fst(x));
+}
+
