@@ -57,10 +57,13 @@ BEGIN
     FLAGS unconditional = ("",~);
 
     emit begin;
+    emit data segment;
 
     for each decl (ast, (REF DECL dcl)VOID:
 	(dcl | (DECLSTM stm): emit global var (id OF stm) | SKIP)
     );
+
+    emit code segment;
 
     for each decl (ast, (REF DECL dcl)VOID:
 	(dcl | (DECLFUN fun): 

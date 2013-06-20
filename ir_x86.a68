@@ -23,17 +23,47 @@ reg table[@1] := (
 PROC emit begin = VOID:
 BEGIN
     putf (asm, ($
-	".intel_syntax noprefix"l
-	".text"ll
-	".lcomm heapptr, 4"ll
-	".lcomm heap, 4*0x100000"ll
-    $));
-    library functions
+	".intel_syntax noprefix"ll
+	".set heap_fixedsize, 8*0x1000"l
+	".lcomm stack_start, 4"l
+	".lcomm heap_end, 4"l
+	".lcomm heap_ptr, 4"l
+	".lcomm heap_start, heap_fixedsize"l
+    $))
 END;
+
+PROC emit code segment = VOID:
+    putf (asm, ($ ".text"ll $));
+
+PROC emit data segment = VOID:
+    SKIP;
 
 # right now, we apply a very dirty hack to see if a number if an integer or a tuple #
 PROC library functions = VOID:
 BEGIN
+    # memory allocation #
+    putf (asm, ($
+	"getmem:"l
+	4x"push ebx"l
+	4x"mov eax, dword ptr [heap_ptr]"l
+	4x"cmp eax, dword ptr [heap_end]"l
+	4x"jb .Lsufficient"l
+	4x"xor eax, eax"l
+	4x"inc eax"l
+	4x"mov ebx, eax"l
+	4x"int 0x80 # halt with error"l
+	".Lsufficient:"l
+	4x"mov ebx, dword ptr [eax]"l
+	4x"test ebx, ebx"l
+	4x"jnz .Lrecycled"l
+	4x"lea ebx, [eax+8]"l
+	".Lrecycled:"l
+	4x"mov dword ptr [heap_ptr], ebx"l
+	4x"pop ebx"l
+	4x"ret"l
+    $));
+
+    # printing #
     putf (asm, ($
         "Fprint:"l
 	4x"mov eax, [esp+4]"l
@@ -90,7 +120,7 @@ END;
 
 PROC emit global var = (IDENT id)VOID: 
     putf (asm, ($
-	".lcomm L"g", 4"ll
+	".lcomm V"g", 4"ll
     $, name OF id));
 PROC emit label = (STRING lbl)VOID: 
     putf (asm, ($
@@ -100,15 +130,22 @@ PROC emit startup = VOID:
     putf (asm, ($l
 	".global _start"l
 	"_start:"l
-	4x"lea eax, [heap]"l
-	4x"mov [heapptr], eax"l
+	4x"mov [stack_start], esp"l
+	4x"lea eax, heap_start"l
+	4x"mov [heap_ptr], eax"l
+	4x"add eax, heap_fixedsize"l
+	4x"mov [heap_end], eax"l
     $));
 PROC emit end = VOID:
+BEGIN
     putf (asm, ($
 	4x"xor eax, eax"l
+	4x"xor ebx, ebx"l
 	4x"inc eax"l
-	4x"int 0x80"l
+	4x"int 0x80"ll
     $));
+    library functions
+END;
 
 INT arg counter;
 
@@ -284,7 +321,7 @@ PROC denote parameter = (INT i)LOCATION:
 PROC denote local var = (INT i)LOCATION:
     INDIRECT(ebp, -i);
 PROC denote global var = (STRING name)LOCATION:
-    LABEL("L"+name);
+    LABEL("V"+name);
 PROC denote int = (INT val)LOCATION:
     IMMEDIATE(val,~);
 PROC denote fun result = REGISTER:
@@ -300,13 +337,9 @@ BEGIN
     REGISTER hnd = obtain temporary;
     reserve register (num tempor);
     putf (asm, ($
-	4x"mov "g", dword ptr [heapptr]"l
-	4x"add "g", 8"l
-	4x"mov eax, dword ptr ["g"]"l
-	4x"test eax, eax"l
-	4x"cmovz eax, "gl
-	4x"mov dword ptr [heapptr], eax"l
-    $, REPR hnd, REPR hnd, REPR hnd, REPR hnd));
+	4x"call getmem"l
+	4x"mov "g", eax"l
+    $, REPR hnd));
     discard (num tempor);
     hnd
 END;
