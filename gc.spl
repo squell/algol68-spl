@@ -1,0 +1,63 @@
+Int _bssSize() {}
+Int _bss(Int pos) {}
+Int _stackSize() {}
+Int _stack(Int pos) {}
+
+Void _touch(t obj) {}
+Bool _valid(Int val) {}
+(Int,Int) _read(Int addr) {}
+
+Int _reinitHeap() {}
+Void _mkAvail(Int pos) {}
+Bool _reached(Int pos) {}
+
+Void gc_mark(Int addr)
+{
+    while(_valid(addr)) {
+	(Int,Int) cell = _read(addr);
+	_touch(cell);
+	gc_mark(fst(cell));
+	addr = snd(cell);
+    }
+}
+
+Void gc_sweep()
+{
+    Int i = _reinitHeap();
+    while(i > 0) {
+	i = i-1;
+	if(!_reached(i)) _mkAvail(i);
+    }
+}
+
+Void gc_collect()
+{
+    Int i = _stackSize();
+    while(i > 0) {
+	i = i - 1;
+	gc_mark(_stack(i));
+    }
+    i = _bssSize();
+    while(i > 0) {
+	i = i - 1;
+	gc_mark(_bss(i));
+    }
+    gc_sweep();
+}
+
+Void doNothing(u x) 
+{
+    return;
+}
+
+Void main()
+{
+    Int i = 0;
+    while(True) {
+	doNothing(1:2:3:4:[]);
+	print(i);
+	i=i+1;
+	if(i%500==0) gc_collect();
+    }
+}
+
