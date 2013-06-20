@@ -44,7 +44,7 @@ BEGIN
 	IF retrieve (slice(symbols,cur scope), name OF id, LOC DECLINFO) THEN
 	    complain ("`"+name OF id+"' already defined", pos OF id)
 	ELSE
-	    assert(symbols, name OF id, info OF id:=DECLINFO(decl,info))
+	    assert (symbols, name OF id, info OF id:=DECLINFO(decl,info))
 	FI;
 
     PROC get symbol = (IDENT id)DECLINFO:
