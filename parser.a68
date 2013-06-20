@@ -69,7 +69,8 @@ BEGIN
 	pos := (line, col);
 	tok := cur char;
 
-	IF is alnum(cur char) THEN 
+	#IF is alnum(cur char) THEN# #bootstrap#
+	IF is alnum(cur char) OR cur char = "_" THEN
 	    WHILE CHAR ch = next char; is alnum(ch) OR ch = "_" DO tok +:= ch OD
 	ELSE next char FI;
 
@@ -77,7 +78,8 @@ BEGIN
 	IF tok = "" THEN 
 	    8DEBUG (VOID: write(("<~>", new line)));
 	    EMPTY 
-	ELIF is alpha (tok[1]) THEN
+	#ELIF is alpha (tok[1]) THEN#  #bootstrap#
+	ELIF is alpha (tok[1]) OR tok[1] = "_" THEN
 	    8DEBUG (VOID: write(("<IDWORD:", tok, ">", new line)));
 	    (is reserved (tok) | SYMBOL(tok,pos) | IDENT(tok, pos, HEAP DECLINFO))
 	ELIF is digit (tok[1]) THEN

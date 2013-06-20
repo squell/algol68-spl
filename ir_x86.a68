@@ -24,11 +24,12 @@ PROC emit begin = VOID:
 BEGIN
     putf (asm, ($
 	".intel_syntax noprefix"ll
-	".set heap_fixedsize, 8*0x1000"l
+	".set heap_fixedsize, 0x1000"l
 	".lcomm stack_start, 4"l
 	".lcomm heap_end, 4"l
 	".lcomm heap_ptr, 4"l
-	".lcomm heap_start, heap_fixedsize"l
+	".lcomm heap_mark, heap_fixedsize/8"l
+	".lcomm heap_start, heap_fixedsize*8+4"l
     $))
 END;
 
@@ -44,7 +45,10 @@ BEGIN
     # memory allocation #
     putf (asm, ($
 	"getmem:"l
-	4x"push ebx"l
+	4x"mov eax, dword ptr [heap_ptr]"l
+	4x"cmp eax, dword ptr [heap_end]"l
+	4x"jb .Lsufficient"l
+	4x"#call Fgc_collect"l
 	4x"mov eax, dword ptr [heap_ptr]"l
 	4x"cmp eax, dword ptr [heap_end]"l
 	4x"jb .Lsufficient"l
@@ -53,6 +57,7 @@ BEGIN
 	4x"mov ebx, eax"l
 	4x"int 0x80 # halt with error"l
 	".Lsufficient:"l
+	4x"push ebx"l
 	4x"mov ebx, dword ptr [eax]"l
 	4x"test ebx, ebx"l
 	4x"jnz .Lrecycled"l
@@ -60,7 +65,8 @@ BEGIN
 	".Lrecycled:"l
 	4x"mov dword ptr [heap_ptr], ebx"l
 	4x"pop ebx"l
-	4x"ret"l
+	4x"ret"ll
+	".include ""gc_lib.s"""ll
     $));
 
     # printing #
@@ -117,6 +123,25 @@ BEGIN
 	4x"ret 4"ll
     $))
 END;
+COMMENT for debugging
+    "pusha"l
+    "mov eax, dword ptr [heap_ptr]"l
+    "and eax, 0xFFFFF"l
+    "push eax"l
+    "call Fprint"l
+
+    "mov eax, offset heap_start"l
+    "and eax, 0xFFFFF"l
+    "push eax"l
+    "call Fprint"l
+
+    "mov eax, [heap_end]"l
+    "and eax, 0xFFFFF"l
+    "push eax"l
+    "call Fprint"l
+    "popa"l
+COMMENT
+
 
 PROC emit global var = (IDENT id)VOID: 
     putf (asm, ($
@@ -133,7 +158,7 @@ PROC emit startup = VOID:
 	4x"mov [stack_start], esp"l
 	4x"lea eax, heap_start"l
 	4x"mov [heap_ptr], eax"l
-	4x"add eax, heap_fixedsize"l
+	4x"add eax, offset heap_fixedsize*8"l
 	4x"mov [heap_end], eax"l
     $));
 PROC emit end = VOID:
