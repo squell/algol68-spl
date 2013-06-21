@@ -1,0 +1,9 @@
+Void voidme(u x) {}
+
+u hac([u] x) { }
+
+Void main()
+{
+    hac([]);
+    voidme(hac([]));
+}
