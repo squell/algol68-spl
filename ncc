@@ -1,0 +1,1 @@
+a68g --script compiler.a68 "$@"
