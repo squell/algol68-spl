@@ -67,7 +67,7 @@ BEGIN
 
     for each decl (ast, (REF DECL dcl)VOID:
 	(dcl | (DECLFUN fun): 
-	    IF (name OF id OF (args OF fun)[0])[1] /= "_" THEN #bootstrap#
+	    IF (name OF id OF (args OF fun)[0])[1] /= "_" THEN #for reification#
 		emit prolog (name OF id OF (args OF fun)[0], UPB args OF fun, frame size OF fun);
 		%body OF fun;
 		emit epilog
