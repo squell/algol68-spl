@@ -1,0 +1,14 @@
+/* 
+ type entanglement
+*/
+
+(u,v) set1((u,v) tup, u x) {}
+(u,v) set2((u,v) tup, v x) {}
+(u,u) magic() {}
+Void accept(t x) {}
+
+Void main()
+{
+    accept( set1(set2(magic(), 4), True) );
+}
+

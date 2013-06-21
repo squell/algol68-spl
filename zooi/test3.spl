@@ -1,0 +1,19 @@
+/* 
+ arguments should be deducted after return types if sanity = 2
+*/
+
+u id(u x)
+{
+    return x;
+}
+
+[l] n() {}
+
+Void accept(t x) {}
+
+Void main()
+{
+    [Int] x = id(n());
+    accept(id([]));
+}
+
