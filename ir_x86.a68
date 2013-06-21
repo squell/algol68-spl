@@ -1,3 +1,8 @@
+COMMENT
+
+    the ugly side of generating code
+    
+COMMENT
 #TODO: fix the "mov esi, [esi]" bug #
 
 INT num tempor = 5;
