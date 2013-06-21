@@ -29,7 +29,6 @@ BEGIN
     TYPE void     := SYMBOL("Void", ~);
     TYPE integral := SYMBOL("Int", ~);
     TYPE boolean  := SYMBOL("Bool", ~);
-    #TYPE placeholder := SYMBOL("*", ~);#
     HEAP TYPE dont care;
 
     # cleverly using the dictionary to reason about scope #
@@ -108,12 +107,15 @@ BEGIN
 	ESAC FI;
 
     # replace type variables with shared structures; do this just once #
+
     INT ucount := 0;
     PROC substitute type vars = (DECLFUN fun)VOID:
     BEGIN
 	DICT types := new dictionary(1);
 	INT count := 0;
 	FOR i FROM 0 TO UPB args OF fun DO
+	    REF REF TYPE cur = type OF (args OF fun)[i];
+	    cur := edit type(cur);
 
 	    PROC edit type = (REF TYPE type)REF TYPE:
 	    CASE type IN
@@ -129,15 +131,17 @@ BEGIN
 		    FI
 	    OUT type
 	    ESAC;
-
-	    REF REF TYPE cur = type OF (args OF fun)[i];
-	    cur := edit type(cur)
+	    ~
 	OD;
+
 	[count]PARAM type vars;
 	for each entry (types, (REF DICTENTRY entry)VOID: 
 	    type vars[pos OF content OF entry] := (decl OF content OF entry|(PARAM v):v|~));
 	unifiers OF fun := type vars
     END;
+
+    # process the ast; check types & match identifiers in one pass.
+      we can do this since we require declarations to preceed usage #
 
     for each decl(ast, (REF DECL this)VOID:
 	CASE this IN
@@ -367,12 +371,6 @@ BEGIN
 		rhs OF t %> v;
 		type identify (any tuple, type, pos OF t)
 	    END,
-	    # oldstyle
-	    CASE type IN (PAIRT p):
-		(lhs OF t %> lt OF p; rhs OF t %> rt OF p)
-	    OUT unification error (PAIRT(placeholder,placeholder), type, pos OF t)
-	    ESAC,
-	    #
 	(IDENT id):
 	    type identify (get var type (id), type, pos OF id),
 	(FUNCALL f):
@@ -421,15 +419,4 @@ BEGIN
 
 ~
 END;
-
-#
-PR include "parser.a68" PR
-PR include "astprint.a68" PR
-
-(DECLS prog := parse file("test3.spl");
- semantic analysis(prog);
- DUMP prog;
- ~
- )
-#
 
