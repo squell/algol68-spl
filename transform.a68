@@ -76,6 +76,7 @@ CASE expr IN
 	    OP NOT = (SYMBOL op)SYMBOL:
 		IF repr OF op = "+" THEN ("-",pos OF op) ELSE ("+", pos OF op) FI;
 
+	    # try to exploit commutativity to flip arguments #
 	    STRING op = repr OF op OF d;
 	    DYAD comm :=
 		IF (op = "+" OR op = "*") AND c1 < c2 THEN
@@ -95,6 +96,7 @@ CASE expr IN
 		    (op OF d, lhs, rhs)
 		FI;
 
+	    # use transitivity to move parenthesis to the left #
 	    PROC transit = (DYAD p)DYAD:
 	    BEGIN
 		DYAD sub;
@@ -111,6 +113,7 @@ CASE expr IN
 		FI
 	    END;
 
+	    # constant folding #
 	    INT v1, v2;
 	    IF lhs OF comm->v1 AND rhs OF comm->v2 THEN
 		IF op OF comm = "+" THEN
