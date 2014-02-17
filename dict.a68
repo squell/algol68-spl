@@ -7,12 +7,12 @@ PR include "util.a68" PR
 #
 
 INT fnv prime = 16777619;
-INT fnv basis = 2166136261;
+BITS fnv basis = 16r811c9dc5; # INT fnv basis = 2166136261; #
 INT fnv buckets := 64;
 
 OP HASH = (STRING key)INT:
 BEGIN
-    BITS hash := BIN fnv basis;
+    BITS hash := fnv basis;
     FOR i TO UPB key DO
 	BITS byte = BIN ABS key[i];
 	hash := SHORTEN BIN (LENG fnv prime * ABS (hash XOR byte) MOD (LENG2**32))
