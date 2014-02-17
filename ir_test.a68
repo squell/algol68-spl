@@ -1,0 +1,71 @@
+
+PROC emit global var = (IDENT id)VOID: 
+    print (("GLOBAL:", name OF id, new line));
+PROC emit label = (STRING lbl)VOID: 
+    print (("@", lbl, ":", new line));
+PROC emit startup = VOID:
+    print (("START:",new line));
+PROC emit end = VOID:
+    print (("STOP:",new line));
+PROC emit prolog = (INT i)VOID:
+    print (("PROLOG:",new line));
+PROC emit epilog = (INT i)VOID:
+    print (("EPILOG:",new line));
+PROC emit call = (STRING name, INT arg size)VOID:
+    emit ("call", name, arg size);
+PROC emit prepare call = (INT arg size)VOID: 
+    SKIP;
+
+PROC emit = (STRING name, LOCATION dst, src)LOCATION:
+    (print ((name, " "));
+     emit operand(dst);
+     print (", ");
+     emit operand(src);
+     print (new line);
+     dst);
+
+PROC emit move = (LOCATION dst, src)VOID:
+    emit("mov", dst, src);
+PROC emit push arg = (LOCATION loc, INT arg num)VOID:
+    emit("push", loc, arg num);
+
+PROC emit jump = (STRING dest, FLAGS cnd)LOCATION:
+    emit("jmp", dest, cnd);
+
+PROC emit test = (LOCATION src)VOID:
+    emit("test", src, ~);
+PROC emit bin = (STRING op, LOCATION dst,src)LOCATION:
+    emit (op, dst, src);
+PROC emit mon = (STRING op, LOCATION dst)LOCATION:
+    emit (op, dst, ~);
+
+PROC emit cmp = (STRING op, LOCATION dst,src)LOCATION:
+    (emit (op, dst, src); FLAGS(op, ~));
+
+PROC emit operand = (LOCATION mem)VOID:
+    CASE mem IN
+	(IMMEDIATE imm): print (whole(imm,0)),
+	(DIRECT str): print (str),
+	(INDIRECT ind): print(("[", base OF ind, "+", whole(offset OF ind,0), "]")),
+	(FLAGS flag): print (("?", cond OF flag))
+    ESAC;
+
+PROC denote parameter = (INT i)LOCATION:
+    INDIRECT("%sp", -i);
+PROC denote local var = (INT i)LOCATION:
+    INDIRECT("%sp", +i);
+PROC denote global var = (STRING name)LOCATION:
+    INDIRECT(name, 0);
+PROC denote int = (INT val)LOCATION:
+    IMMEDIATE(val);
+PROC denote fun result = LOCATION:
+    DIRECT("%acc");
+
+INT temp counter := 0;
+INT label counter := 0;
+
+PROC obtain label = DIRECT:
+    "@"+whole(label counter+:=1,0);
+PROC obtain temporary = DIRECT:
+    "%"+whole(temp counter+:=1,0);
+
